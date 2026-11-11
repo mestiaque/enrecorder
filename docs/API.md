@@ -57,6 +57,22 @@ format ("mp4"|"mkv"|"webm"), codec ("h264"|"hevc"|"av1"|"vp9"), encoder ("auto"|
 sizeBytes, encoder, width, height, source, outputPath?, recordingId?, error?, notice?, audioLevel? (dBFS),
 audioTracks, audioOnly }`.
 
+## Library and exports
+
+| Command | Arguments | Returns |
+|---|---|---|
+| `get_media` | `id` | `{ item: MediaItem, metadata?: Probe, exists }` |
+| `media_url` | `id` | preview URL (`http://127.0.0.1:<port>/m/<token>/<id>`) |
+| `media_thumbnail` | `id` | path of the cached JPEG |
+| `rename_media` | `id`, `title` | `MediaItem` |
+| `delete_media` | `id` | — (file to the trash) |
+| `set_favorite` | `id`, `on` | — |
+| `start_export` | `id`, `preset: ExportPreset` | job id |
+| `cancel_export` | `id` (job) | — |
+
+`ExportPreset` = `{ kind: "convert"|"compress"|"audio"|"gif"|"trim", format, quality, startMs?, endMs?,
+maxHeight?, removeAudio?, volume? }`. Event `export-progress`: `{ id, status, progress, error?, outputPath }`.
+
 ## Screenshots
 
 | Command | Arguments | Returns |

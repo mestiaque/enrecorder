@@ -1,6 +1,6 @@
 /** Typed wrappers around the Rust commands: one function per command. */
 import { invoke } from "@tauri-apps/api/core";
-import type { AboutInfo, AudioDevice, AudioRecordingOptions, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
+import type { AboutInfo, AudioDevice, AudioRecordingOptions, ExportPreset, MediaDetail, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
 
 export const api = {
   getSettings: () => invoke<SettingsPayload>("get_settings"),
@@ -23,6 +23,14 @@ export const api = {
   saveScreenshot: (id: string, png: string, format: string, quality: number, annotations: string | null) => invoke<Screenshot>("save_screenshot", { id, png, format, quality, annotations }),
   copyScreenshot: (png: string) => invoke<void>("copy_screenshot", { png }),
   getScreenshot: (id: string) => invoke<Screenshot>("get_screenshot", { id }),
+  getMedia: (id: string) => invoke<MediaDetail>("get_media", { id }),
+  mediaUrl: (id: string) => invoke<string>("media_url", { id }),
+  renameMedia: (id: string, title: string) => invoke<MediaItem>("rename_media", { id, title }),
+  deleteMedia: (id: string) => invoke<void>("delete_media", { id }),
+  setFavorite: (id: string, on: boolean) => invoke<void>("set_favorite", { id, on }),
+  mediaThumbnail: (id: string) => invoke<string>("media_thumbnail", { id }),
+  startExport: (id: string, preset: ExportPreset) => invoke<string>("start_export", { id, preset }),
+  cancelExport: (id: string) => invoke<void>("cancel_export", { id }),
   startAudioRecording: (options: AudioRecordingOptions) => invoke<RecordingSnapshot>("start_audio_recording", { options }),
   pauseRecording: () => invoke<void>("pause_recording"),
   resumeRecording: () => invoke<void>("resume_recording"),
@@ -52,6 +60,7 @@ export const EVENTS = {
   regionSelected: "region-selected",
   startRequest: "recording-start-request",
   confirmQuit: "confirm-quit",
+  exportProgress: "export-progress",
 } as const;
 
 /** Commands reject with `{ kind, message }` (AppError) or a plain string. */

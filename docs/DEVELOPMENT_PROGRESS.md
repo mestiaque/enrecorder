@@ -181,3 +181,26 @@ PipeWire, then Windows.Graphics.Capture), FFmpeg recording pipeline, recording H
 **Known limitations**
 * Window screenshots on X11/Windows capture what is visible on screen.
 * No live area selection on screen yet: the area is cropped from a full capture (frozen screen).
+
+## Phase 5 — Library, export queue, editor (2026-11-11)
+
+**Implemented**
+* Core: library actions (item, metadata, rename, delete, favourites), `media::thumbs` (cached
+  thumbnails: frame / waveform / scaled image), `export` (preset → FFmpeg arguments, a queue
+  thread running one job at a time, progress from `-progress`, cancel, persistence, recovery,
+  FFprobe verification, library rows).
+* App: `get_media`, `media_url`, `media_thumbnail`, `rename_media`, `delete_media` (system trash),
+  `set_favorite`, `start_export`, `cancel_export`, `export-progress` events; asset scope limited to
+  ENRecorder's folders; a 127.0.0.1 preview server (token, Range) because WebKitGTK's player cannot
+  read `asset:` URLs; FFmpeg info lines no longer logged as warnings.
+* UI: Recordings with thumbnails and a detail panel (player, facts, trim/export/rename/show/open/
+  delete, favourite), Export dialog (convert/compress/audio/GIF), live Export Center (progress,
+  cancel, show file), Media Editor (selection, volume, remove sound, format, export).
+
+**Tests executed**
+* `cargo test -p enrec-core`: 68 passed — new: export arguments; real queue (trim 1–3 s → 2.0 s
+  MP4, GIF, MP3, cancel of a waiting job, library rows); thumbnails made and reused.
+* `scripts/test/smoke-library.sh` (Xvfb + PipeWire, UI driven): record 3 s audio → Recordings →
+  detail panel with waveform thumbnail and a playing preview → Export… → MP3 job completed in the
+  Export Center → added to the library → Media Editor shows it.
+* clippy `-D warnings` (core, app), `pnpm typecheck`, `pnpm test` (14): clean.

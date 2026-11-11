@@ -446,6 +446,7 @@ impl Runner {
         if let Some(mut err) = child.stderr.take() {
             let buf = stderr.clone();
             let level = self.level.clone();
+            let info_level = !self.p.plan.audio_inputs.is_empty();
             std::thread::spawn(move || {
                 let mut text = String::new();
                 let mut chunk = [0u8; 4096];
@@ -465,12 +466,14 @@ impl Runner {
                         if line.contains("Parsed_ametadata") || line.contains("Parsed_astats") || line.starts_with("frame:") {
                             continue;
                         }
-                        // At "info" (audio meter on) FFmpeg also prints its stream summary.
-                        if line.starts_with(' ') || line.starts_with("Input #") || line.starts_with("Output #") || line.starts_with("Stream mapping") || line.starts_with("Press [q]") {
+                        // At "info" (audio meter on) FFmpeg also prints its summary and statistics:
+                        // only lines that look like problems are warnings then.
+                        let lower = line.to_ascii_lowercase();
+                        if info_level && !["error", "failed", "invalid", "cannot", "could not", "unable", "denied"].iter().any(|k| lower.contains(k)) {
                             log::debug!(target: "ffmpeg", "{}", line.trim_end());
-                            continue;
+                        } else {
+                            log::warn!(target: "ffmpeg", "{}", line.trim_end());
                         }
-                        log::warn!(target: "ffmpeg", "{}", line.trim_end());
                         b.push(line.trim_end().to_string());
                         if b.len() > 30 {
                             b.remove(0);

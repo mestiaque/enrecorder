@@ -22,12 +22,14 @@ function details(m: MediaItem): string {
 
 const open = (m: MediaItem) => api.openPath(m.path).catch((e) => toast({ kind: "error", title: "Could not open the file", detail: errorMessage(e) }));
 
-export function MediaRow({ item }: { item: MediaItem }) {
+export function MediaRow({ item, selected, onSelect, thumb }: { item: MediaItem; selected?: boolean; onSelect?: () => void; thumb?: React.ReactNode }) {
   return (
-    <button onDoubleClick={() => void open(item)} className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-raised" title="Double-click to open">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-raised text-accent">
-        <KindIcon kind={item.kind} />
-      </span>
+    <button onClick={onSelect} onDoubleClick={() => void open(item)} className={cn("flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-raised", selected && "bg-accent/10 hover:bg-accent/15")} title="Double-click to open">
+      {thumb ?? (
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-raised text-accent">
+          <KindIcon kind={item.kind} />
+        </span>
+      )}
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5 truncate text-[13px]">
           {item.title}

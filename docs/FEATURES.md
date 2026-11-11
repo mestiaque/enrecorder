@@ -70,10 +70,19 @@ strength of mocked tests alone.
 | Save as PNG, JPEG or WebP (FFmpeg encodes JPEG/WebP); copy to the clipboard | Done | |
 | Original kept, annotations stored as JSON: a saved screenshot can be edited again | Done | |
 
+## Library, export and editor (phase 5)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Recordings: thumbnails (video frame, audio waveform, scaled screenshot; cached), detail panel with player/preview, FFprobe facts, multi-track count | Done | |
+| Rename (file and entry), move to the system trash, favourites, show in folder, open with the default app | Done | tags: later |
+| Preview server: recordings stream over HTTP on 127.0.0.1 (random port + per-run token, library items only, Range/seek) | Done | WebKitGTK cannot play `asset:` URLs |
+| Export queue: convert (MP4/WebM/MKV), compress (smaller CRF + size), audio only (MP3/M4A/WAV/FLAC/Opus), GIF (palette), trim; one job at a time, progress, cancel, persisted, interrupted jobs marked failed on start, results verified and added to the library | Done | |
+| Media Editor: preview, start/end (sliders or "at the current position"), play selection, volume, remove sound, output format, non-destructive export | Done | split/crop/multi-clip timeline: later |
+
 ## Planned
 
 | Area | Phase |
 |---|---|
-| Library actions (rename, delete, tags, favourites, preview, metadata via FFprobe, thumbnails); export queue; basic editor | 5 |
 | Webcam overlay, cursor effects, keystroke overlay, audio processing, OCR, optional transcription | 6 |
 | Recovery (MKV finalisation), performance, security review, installers (Windows NSIS/portable, AppImage), FFmpeg bundling for Windows | 7 |

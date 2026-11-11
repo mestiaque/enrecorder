@@ -3,4 +3,5 @@
 
 pub mod ffmpeg;
 pub mod probe;
+pub mod thumbs;
 pub mod process;

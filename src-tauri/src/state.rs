@@ -36,11 +36,23 @@ pub struct AppState {
     pub log_dir: PathBuf,
     pub system_videos: PathBuf,
     pub system_pictures: PathBuf,
+    /// Export queue (convert, compress, audio, GIF, trim).
+    pub exports: Arc<enrec_core::export::ExportManager>,
 }
 
 impl AppState {
     pub fn recordings_folder(&self) -> PathBuf {
         self.settings.read().recordings_folder(&self.system_videos)
+    }
+
+    /// Exported files: an "Exports" folder inside the recordings folder.
+    pub fn exports_folder(&self) -> PathBuf {
+        self.recordings_folder().join("Exports")
+    }
+
+    /// Library thumbnails.
+    pub fn thumbs_dir(&self) -> PathBuf {
+        self.data_dir.join("thumbnails")
     }
 
     /// Audio Recorder files: an "Audio" folder inside the recordings folder.

@@ -6,6 +6,7 @@ pub mod audio;
 pub mod capture;
 pub mod database;
 pub mod error;
+pub mod export;
 pub mod media;
 pub mod recording;
 pub mod screenshot;

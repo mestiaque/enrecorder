@@ -255,3 +255,41 @@ export interface Screenshot {
   annotations: string | null;
   createdAt: number;
 }
+
+export interface Probe {
+  container: string | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  durationMs: number | null;
+  bitrate: number | null;
+  videoStreams: number;
+  audioStreams: number;
+}
+
+export interface MediaDetail {
+  item: MediaItem;
+  metadata: Probe | null;
+  exists: boolean;
+}
+
+export interface ExportPreset {
+  kind: "convert" | "compress" | "audio" | "gif" | "trim";
+  format: "mp4" | "webm" | "mkv" | "gif" | "mp3" | "m4a" | "wav" | "flac" | "opus";
+  quality: "high" | "balanced" | "small";
+  startMs?: number | null;
+  endMs?: number | null;
+  maxHeight?: number;
+  removeAudio?: boolean;
+  volume?: number;
+}
+
+export interface ExportUpdate {
+  id: string;
+  status: ExportJob["status"];
+  progress: number;
+  error: string | null;
+  outputPath: string;
+}

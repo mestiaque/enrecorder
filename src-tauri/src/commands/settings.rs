@@ -55,6 +55,9 @@ pub fn set_setting(app: AppHandle, state: State<AppState>, key: String, value: V
         "ffmpegPath" => super::media::refresh_tools(app.clone(), false),
         _ => {}
     }
+    if FOLDER_KEYS.contains(&key.as_str()) {
+        crate::allow_media_dirs(&app);
+    }
     Ok(next)
 }
 

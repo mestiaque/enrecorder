@@ -2,6 +2,7 @@
 //! one connection behind a mutex (every statement is short). Schema changes go through
 //! [`migrations::MIGRATIONS`].
 
+mod library;
 pub mod migrations;
 
 use crate::error::{AppError, Result};

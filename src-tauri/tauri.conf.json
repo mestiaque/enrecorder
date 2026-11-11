@@ -27,7 +27,11 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:"
+      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost; media-src 'self' blob: asset: http://asset.localhost http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:",
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
     }
   },
   "bundle": {
@@ -37,22 +41,39 @@
     "category": "Video",
     "shortDescription": "Screen, audio and screenshot studio",
     "longDescription": "ENRecorder records your screen and audio and takes screenshots, then lets you trim, convert and export them. Local-first: no account, no upload, no watermark.",
-    "copyright": "© 2026 M. Estiaque Ahmed Khan · MIT License",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "copyright": "\u00a9 2026 M. Estiaque Ahmed Khan \u00b7 MIT License",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "linux": {
       "deb": {
         "section": "video",
         "desktopTemplate": "enrecorder.desktop",
-        "depends": ["ffmpeg", "gstreamer1.0-pipewire", "gstreamer1.0-tools"]
+        "depends": [
+          "ffmpeg",
+          "gstreamer1.0-pipewire",
+          "gstreamer1.0-tools"
+        ]
       },
       "rpm": {
         "desktopTemplate": "enrecorder.desktop",
-        "depends": ["ffmpeg"]
+        "depends": [
+          "ffmpeg"
+        ]
       }
     },
     "windows": {
-      "nsis": { "installMode": "currentUser", "displayLanguageSelector": false },
-      "webviewInstallMode": { "type": "downloadBootstrapper" }
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
     },
     "homepage": "https://mestiaque.com"
   }

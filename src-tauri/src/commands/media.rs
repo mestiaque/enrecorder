@@ -45,6 +45,7 @@ pub fn refresh_tools(app: AppHandle, force: bool) {
         {
             let mut t = state.tools.write();
             t.ffmpeg = found.clone();
+            state.exports.set_tools(found.as_ref().map(|f| std::path::PathBuf::from(&f.path)), probe.as_ref().map(|f| std::path::PathBuf::from(&f.path)));
             // Windows: which grabber this FFmpeg offers (ddagrab or gdigrab).
             #[cfg(target_os = "windows")]
             if let Some(f) = &found {

@@ -1,6 +1,11 @@
 import { Clapperboard, FolderOpen, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaRow } from "../components/media/MediaList";
+import { MediaDetailPanel } from "../components/media/MediaDetail";
+import { Thumb } from "../components/media/Thumb";
+import { ScreenshotEditor } from "../components/screenshot/Editor";
+import type { Screenshot } from "../lib/types";
+import { useQueryClient } from "@tanstack/react-query";
 import { EmptyState, PageHeader, Panel } from "../components/ui/blocks";
 import { Button, Segmented, Select } from "../components/ui/primitives";
 import { api, errorMessage } from "../lib/api";
@@ -35,6 +40,10 @@ export function RecordingsPage() {
     return () => window.clearTimeout(t);
   }, [typed]);
   const media = useMedia({ filter, sort, search });
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Screenshot | null>(null);
+  const editShot = (id: string) => void api.getScreenshot(id).then(setEditing).catch((e) => toast({ kind: "error", title: "Could not open", detail: errorMessage(e) }));
   const { data: paths } = usePaths();
   const items = media.data ?? [];
   const filtered = filter !== "all" || search !== "";
@@ -74,11 +83,12 @@ export function RecordingsPage() {
         </div>
         <Select value={sort} onChange={setSort} options={SORTS} />
       </div>
-      <Panel bodyClass="p-2">
+      <div className="flex items-start gap-4">
+      <Panel bodyClass="p-2" className="min-w-0 flex-1">
         {media.isError ? (
           <EmptyState compact icon={<Clapperboard className="h-5 w-5" />} title="Could not load the library" text={errorMessage(media.error)} action={<Button onClick={() => void media.refetch()}>Try again</Button>} />
         ) : items.length ? (
-          items.map((m) => <MediaRow key={`${m.kind}-${m.id}`} item={m} />)
+          items.map((m) => <MediaRow key={`${m.kind}-${m.id}`} item={m} selected={selected === m.id} onSelect={() => setSelected(m.id)} thumb={<Thumb item={m} className="h-10 w-16" />} />)
         ) : (
           <EmptyState
             icon={<Clapperboard className="h-5 w-5" />}
@@ -87,7 +97,20 @@ export function RecordingsPage() {
           />
         )}
       </Panel>
-      {items.length > 0 && <div className="mt-2 text-[11px] text-faint">{items.length.toLocaleString()} item{items.length > 1 ? "s" : ""}</div>}
+      {selected && <MediaDetailPanel id={selected} onClose={() => setSelected(null)} onEditScreenshot={editShot} />}
+      </div>
+      {items.length > 0 && <div className="mt-2 text-[11px] text-faint">{items.length.toLocaleString()} item{items.length > 1 ? "s" : ""} · click for details, double-click to open</div>}
+      {editing && (
+        <ScreenshotEditor
+          shot={editing}
+          startTool="select"
+          onClose={() => {
+            setEditing(null);
+            void qc.invalidateQueries({ queryKey: ["media"] });
+            void qc.invalidateQueries({ queryKey: ["thumb"] });
+          }}
+        />
+      )}
     </>
   );
 }

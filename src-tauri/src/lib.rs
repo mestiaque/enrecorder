@@ -1,5 +1,6 @@
 mod commands;
 mod state;
+mod media_server;
 mod tray;
 
 use commands::{dashboard, library, media, recording, screenshot, settings, system};
@@ -36,6 +37,18 @@ fn capture_backend(sys: &enrec_core::system::SystemInfo) -> Result<std::sync::Ar
     }
 }
 
+/// Lets the window play recordings and show screenshots and thumbnails (asset protocol), for
+/// ENRecorder's own folders only.
+pub fn allow_media_dirs(app: &tauri::AppHandle) {
+    let state = app.state::<AppState>();
+    let scope = app.asset_protocol_scope();
+    for dir in [state.recordings_folder(), state.screenshots_folder(), state.thumbs_dir()] {
+        if let Err(e) = scope.allow_directory(&dir, true) {
+            log::warn!("cannot allow {} for previews: {e}", dir.display());
+        }
+    }
+}
+
 fn build_state(app: &tauri::AppHandle) -> Result<AppState, Box<dyn std::error::Error>> {
     let data_dir = app.path().app_data_dir()?;
     let log_dir = app.path().app_log_dir()?;
@@ -48,13 +61,21 @@ fn build_state(app: &tauri::AppHandle) -> Result<AppState, Box<dyn std::error::E
         log::warn!("{interrupted} recording session(s) were interrupted last time; their files are kept");
     }
     let settings = Settings::from_map(&db.settings_map()?);
+    let db = std::sync::Arc::new(db);
+    let exports = enrec_core::export::ExportManager::new(db.clone(), std::sync::Arc::new(commands::library::ExportEvents(app.clone())));
+    if let Ok(n) = exports.recover() {
+        if n > 0 {
+            log::warn!("{n} export(s) were interrupted last time");
+        }
+    }
     let system = enrec_core::system::detect();
     let capture = capture_backend(&system);
     if let Err(why) = &capture {
         log::warn!("screen capture unavailable: {why}");
     }
     Ok(AppState {
-        db: std::sync::Arc::new(db),
+        db,
+        exports,
         settings: RwLock::new(settings),
         system: RwLock::new(system),
         capture,
@@ -127,6 +148,8 @@ pub fn run() {
             let s = state.system.read().clone();
             log::info!("ENRecorder {} on {} · display {:?} · desktop {}", app.package_info().version, s.os_name, s.display_server, s.desktop);
             app.manage(state);
+            allow_media_dirs(app.handle());
+            media_server::start(app.handle().clone());
             media::refresh_tools(app.handle().clone(), false);
             tray::install(app.handle())?;
             register_shortcuts(app.handle());
@@ -187,6 +210,14 @@ pub fn run() {
             screenshot::save_screenshot,
             screenshot::copy_screenshot,
             screenshot::get_screenshot,
+            library::get_media,
+            library::media_url,
+            library::rename_media,
+            library::delete_media,
+            library::set_favorite,
+            library::media_thumbnail,
+            library::start_export,
+            library::cancel_export,
             recording::start_audio_recording,
             recording::recording_status,
             recording::start_video_recording,
