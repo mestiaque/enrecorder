@@ -34,3 +34,7 @@ ashpd = { version = "0.11", default-features = false, features = ["tokio"], opti
 # Passing the portal's PipeWire descriptor to the GStreamer reader (dup2 in the child).
 libc = { version = "0.2", optional = true }
 tokio = { version = "1", features = ["rt", "time", "macros"], optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Windows capture backend: monitors (DXGI outputs, as ddagrab numbers them) and windows.
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading"] }

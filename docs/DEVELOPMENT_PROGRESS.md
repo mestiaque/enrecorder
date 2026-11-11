@@ -101,3 +101,23 @@ PipeWire, then Windows.Graphics.Capture), FFmpeg recording pipeline, recording H
 **Known limitations**
 * Not yet tested on GNOME or KDE Wayland on real hardware.
 * Windows backend still to come (next).
+
+## Phase 2, part 3 — Windows screen recording (2026-11-11)
+
+**Implemented**
+* `capture::windows`: monitors from DXGI (adapter 0 outputs, the numbering `ddagrab` uses),
+  windows from `EnumWindows` (visible, not cloaked, not tool windows, own windows excluded,
+  executable name as the app).
+* Capture through FFmpeg's Windows grabbers so the session (segments, pause/resume,
+  finalisation) is shared with Linux: `ddagrab` (Desktop Duplication: GPU copy, physical pixels
+  at any display scaling) for monitors, single-monitor desktops and areas on one monitor;
+  `gdigrab` for windows (`title=`), multi-monitor desktops and FFmpeg builds without `ddagrab`.
+  The FFmpeg build is checked once for `ddagrab` when it is found.
+
+**Tests executed**
+* Cross-build for `x86_64-pc-windows-gnu` in `enrec-build`: `cargo clippy -p enrec-core -D
+  warnings` clean, `cargo check` of the app clean.
+
+**Known limitations**
+* Not run on real Windows yet (no Windows machine here); the CI Windows job builds it.
+* A captured window is grabbed from the screen (covering windows are captured too).

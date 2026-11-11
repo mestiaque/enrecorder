@@ -9,5 +9,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       sway xdg-desktop-portal xdg-desktop-portal-wlr pipewire wireplumber pipewire-pulse \
       foot grim \
     && rm -rf /var/lib/apt/lists/*
-RUN apt-get update && apt-get install -y --no-install-recommends gstreamer1.0-pipewire gstreamer1.0-tools \
+RUN apt-get update && apt-get install -y --no-install-recommends gstreamer1.0-pipewire gstreamer1.0-tools pulseaudio-utils \
     && rm -rf /var/lib/apt/lists/*

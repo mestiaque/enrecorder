@@ -30,7 +30,8 @@ fn capture_backend(sys: &enrec_core::system::SystemInfo) -> Result<std::sync::Ar
         DisplayServer::X11 => enrec_core::capture::x11::X11Backend::new().map(|b| std::sync::Arc::new(b) as _).map_err(|e| e.to_string()),
         #[cfg(target_os = "linux")]
         DisplayServer::Wayland => enrec_core::capture::wayland::WaylandBackend::new().map(|b| std::sync::Arc::new(b) as _).map_err(|e| e.to_string()),
-        DisplayServer::Windows => Err("Recording on Windows (Windows.Graphics.Capture) is still being built.".into()),
+        #[cfg(target_os = "windows")]
+        DisplayServer::Windows => enrec_core::capture::windows::WindowsBackend::new().map(|b| std::sync::Arc::new(b) as _).map_err(|e| e.to_string()),
         _ => Err("No graphical session was found, so the screen cannot be recorded.".into()),
     }
 }

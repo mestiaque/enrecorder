@@ -45,6 +45,11 @@ pub fn refresh_tools(app: AppHandle, force: bool) {
         {
             let mut t = state.tools.write();
             t.ffmpeg = found.clone();
+            // Windows: which grabber this FFmpeg offers (ddagrab or gdigrab).
+            #[cfg(target_os = "windows")]
+            if let Some(f) = &found {
+                enrec_core::capture::windows::set_ffmpeg(std::path::Path::new(&f.path));
+            }
             t.ffprobe = probe;
             t.capabilities = None;
         }

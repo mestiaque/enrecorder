@@ -4,13 +4,15 @@
 //! every backend gets the same controls.
 //!
 //! Backends: X11 (FFmpeg's XCB/XShm grabber, sources from EWMH + RandR) — done.
-//! Wayland (xdg-desktop-portal ScreenCast + PipeWire) and Windows (Windows.Graphics.Capture)
-//! are planned for the rest of phase 2.
+//! Wayland (xdg-desktop-portal ScreenCast + PipeWire) — done. Windows (FFmpeg ddagrab/gdigrab,
+//! sources from DXGI and EnumWindows) — done.
 
 pub mod frames;
 pub mod state;
 #[cfg(all(target_os = "linux", feature = "wayland"))]
 pub mod wayland;
+#[cfg(target_os = "windows")]
+pub mod windows;
 #[cfg(target_os = "linux")]
 pub mod x11;
 
