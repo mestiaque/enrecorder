@@ -121,7 +121,7 @@ impl X11Backend {
         }
         let mut args = self.grab_args(req.fps, req.show_cursor);
         args.extend(["-video_size".into(), format!("{w}x{h}"), "-i".into(), format!("{}+{x},{y}", self.display)]);
-        Ok(CaptureInput { args, width: w, height: h })
+        Ok(CaptureInput { args, width: w, height: h, frames: None })
     }
 }
 
@@ -156,6 +156,7 @@ impl CaptureBackend for X11Backend {
                 let (x, y, w, h) = m.ok_or_else(|| AppError::NotFound(format!("monitor {id} is no longer connected")))?;
                 self.rect_input(req, root, x, y, w, h)
             }
+            CaptureSource::Portal => Err(AppError::Unsupported("the sharing dialog is only used on Wayland".into())),
             CaptureSource::Window { id, .. } => {
                 let found = s.windows.iter().find_map(|w| match w {
                     CaptureSource::Window { id: wid, width, height, .. } if wid == id => Some((*width, *height)),
@@ -164,7 +165,7 @@ impl CaptureBackend for X11Backend {
                 let (w, h) = found.ok_or_else(|| AppError::NotFound("the window was closed".into()))?;
                 let mut args = self.grab_args(req.fps, req.show_cursor);
                 args.extend(["-window_id".into(), id.clone(), "-i".into(), self.display.clone()]);
-                Ok(CaptureInput { args, width: w, height: h })
+                Ok(CaptureInput { args, width: w, height: h, frames: None })
             }
         }
     }

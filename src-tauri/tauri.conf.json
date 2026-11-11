@@ -43,7 +43,7 @@
       "deb": {
         "section": "video",
         "desktopTemplate": "enrecorder.desktop",
-        "depends": ["ffmpeg"]
+        "depends": ["ffmpeg", "gstreamer1.0-pipewire", "gstreamer1.0-tools"]
       },
       "rpm": {
         "desktopTemplate": "enrecorder.desktop",

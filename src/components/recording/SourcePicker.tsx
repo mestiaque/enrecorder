@@ -24,6 +24,8 @@ export function sourceLabel(s: CaptureSource): string {
       return s.title;
     case "region":
       return `Area ${s.width}×${s.height} at ${s.x}, ${s.y}`;
+    case "portal":
+      return "Screen or window chosen in the sharing dialog";
   }
 }
 
@@ -55,11 +57,16 @@ export function SourcePicker() {
     [sources, filter],
   );
 
-  // Default: the primary monitor (or the desktop).
+  const portal = sources.find((s) => s.type === "portal");
+  // Default: the primary monitor (or the desktop); on Wayland the sharing dialog.
   useEffect(() => {
+    if (portal) {
+      if (source?.type !== "portal") setSource(portal);
+      return;
+    }
     if (source || !screens.length) return;
     setSource(screens.find((s) => s.type === "monitor" && s.primary) ?? screens[0]);
-  }, [screens, source, setSource]);
+  }, [screens, portal, source, setSource]);
 
   // The area overlay reports back through an event.
   useEffect(() => {
@@ -89,6 +96,11 @@ export function SourcePicker() {
         <div className="text-[13px] text-danger">{errorMessage(q.error)}</div>
       ) : q.data?.unsupported ? (
         <EmptyState compact icon={<MonitorSmartphone className="h-5 w-5" />} title="Recording is not available here yet" text={q.data.unsupported} />
+      ) : portal ? (
+        <div className="space-y-2">
+          <Choice active icon={<MonitorSmartphone className="h-4 w-4" />} title="Choose in the sharing dialog" sub="Wayland: your desktop asks which screen or window to share when you press Start" onClick={() => setSource(portal)} />
+          <div className="text-[11px] text-faint">ENRecorder never sees the screen without your choice in that dialog. Cancelling it cancels the recording.</div>
+        </div>
       ) : (
         <>
           <Segmented

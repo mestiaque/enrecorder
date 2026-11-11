@@ -8,8 +8,9 @@ ENRecorder is part of the EN* family (ENViewer, ENPlayer, ENSave, ENStream, ENiS
 and uses the same look, themes (Dark, Light, Glass, System) and settings layout.
 
 > **Status: phase 2 in progress.** Screen recording works on **Ubuntu X11** (desktop, monitor,
-> window or area; pause/resume; floating controls; tray; shortcuts). Wayland and Windows
-> capture, audio, screenshots and editing come next. See [FEATURES.md](docs/FEATURES.md) and
+> window or area) and on **Wayland** through the desktop's sharing dialog (portal + PipeWire),
+> with pause/resume, floating controls, tray and shortcuts. Windows capture, audio, screenshots
+> and editing come next. See [FEATURES.md](docs/FEATURES.md) and
 > [DEVELOPMENT_PROGRESS.md](docs/DEVELOPMENT_PROGRESS.md).
 
 ## What works today

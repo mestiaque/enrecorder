@@ -28,7 +28,8 @@ fn capture_backend(sys: &enrec_core::system::SystemInfo) -> Result<std::sync::Ar
     match sys.display_server {
         #[cfg(target_os = "linux")]
         DisplayServer::X11 => enrec_core::capture::x11::X11Backend::new().map(|b| std::sync::Arc::new(b) as _).map_err(|e| e.to_string()),
-        DisplayServer::Wayland => Err("Recording on Wayland (portal + PipeWire) is still being built. Until then, choose \"Ubuntu on Xorg\" on the login screen to record.".into()),
+        #[cfg(target_os = "linux")]
+        DisplayServer::Wayland => enrec_core::capture::wayland::WaylandBackend::new().map(|b| std::sync::Arc::new(b) as _).map_err(|e| e.to_string()),
         DisplayServer::Windows => Err("Recording on Windows (Windows.Graphics.Capture) is still being built.".into()),
         _ => Err("No graphical session was found, so the screen cannot be recorded.".into()),
     }

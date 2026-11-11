@@ -38,5 +38,8 @@ GNOME/KDE). The selection still works; the black is only the overlay's backgroun
 **Where are the parts of a failed recording?** — in a hidden folder `.enrecorder-<id>` inside
 the recordings folder; each part is a playable MKV. Automatic recovery arrives in phase 7.
 
-**Wayland** — recording on Wayland is still being built (later in phase 2). Until then choose
-"Ubuntu on Xorg" on the login screen.
+**Wayland: "screen sharing portal is not available"** — install `xdg-desktop-portal` and the
+portal for your desktop (`xdg-desktop-portal-gnome`, `-kde` or `-wlr`).
+
+**Wayland: "GStreamer's PipeWire support is missing"** — `sudo apt install gstreamer1.0-pipewire
+gstreamer1.0-tools` (the .deb installs them).

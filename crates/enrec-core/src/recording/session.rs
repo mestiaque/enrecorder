@@ -13,6 +13,7 @@
 
 use super::{unique_path, EncodePlan, RecordingOptions};
 use crate::capture::state::{next, Event, RecState};
+use crate::capture::frames::{feed, pipe_input_args, FrameSlot, FrameSource};
 use crate::capture::CaptureInput;
 use crate::database::{new_id, Db, NewRecording, NewSession};
 use crate::error::{AppError, Result};
@@ -23,7 +24,7 @@ use serde::Serialize;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -168,7 +169,7 @@ pub fn start(p: StartParams, observer: Arc<dyn Observer>) -> Result<SessionHandl
     let shared = snap.clone();
     let thread = std::thread::Builder::new()
         .name(format!("recording-{}", &id[..8]))
-        .spawn(move || Runner { p, obs: observer, snap: shared, rx, seg_dir: PathBuf::new(), segments: Vec::new(), acc_ms: 0, acc_frames: 0, acc_dropped: 0 }.run())
+        .spawn(move || Runner { p, obs: observer, snap: shared, rx, seg_dir: PathBuf::new(), segments: Vec::new(), acc_ms: 0, acc_frames: 0, acc_dropped: 0, source: None, slot: None }.run())
         .map_err(|e| AppError::Other(format!("could not start the recording thread: {e}")))?;
     Ok(SessionHandle { tx, snap, thread: Some(thread) })
 }
@@ -183,6 +184,8 @@ struct Segment {
     dropped: Arc<AtomicU64>,
     fps_milli: Arc<AtomicU64>,
     stderr: Arc<Mutex<Vec<String>>>,
+    /// Frame-stream input: the thread writing frames to FFmpeg and its stop flag.
+    feeder: Option<(std::thread::JoinHandle<()>, Arc<AtomicBool>)>,
 }
 
 impl Segment {
@@ -203,6 +206,18 @@ struct Runner {
     /// Frames and dropped frames of finished segments.
     acc_frames: u64,
     acc_dropped: u64,
+    /// Frame-stream backends (Wayland, Windows): the capture and its latest-frame slot.
+    source: Option<Box<dyn FrameSource>>,
+    slot: Option<Arc<FrameSlot>>,
+}
+
+impl Drop for Runner {
+    fn drop(&mut self) {
+        // Ends the screen share (portal session / capture item) whatever way the session ended.
+        if let Some(src) = self.source.as_mut() {
+            src.stop();
+        }
+    }
 }
 
 impl Runner {
@@ -234,6 +249,7 @@ impl Runner {
     }
 
     fn run(mut self) {
+        self.source = self.p.input.frames.take();
         self.set_state(Event::Prepare);
         let id = self.snap.lock().session_id.clone();
         // Segments live in a hidden folder next to the recordings until the file is final.
@@ -241,6 +257,20 @@ impl Runner {
         if let Err(e) = std::fs::create_dir_all(&self.seg_dir) {
             self.fail(format!("cannot write to {}: {e}", self.p.output_dir.display()));
             return;
+        }
+        // Frame streams start while preparing: the countdown begins only once pictures arrive,
+        // so "recording" always means frames are being written.
+        if let Some(src) = self.source.as_mut() {
+            let slot = FrameSlot::new(self.p.input.width, self.p.input.height);
+            if let Err(e) = src.start(slot.clone()) {
+                self.fail(format!("the screen share could not start: {e}"));
+                return;
+            }
+            if !slot.wait_first(Duration::from_secs(10)) {
+                self.fail("no picture arrived from the screen share".into());
+                return;
+            }
+            self.slot = Some(slot);
         }
         let countdown = self.p.options.countdown.min(10);
         self.set_state(Event::Ready { countdown: countdown > 0 });
@@ -366,7 +396,10 @@ impl Runner {
         let path = self.seg_dir.join(format!("part-{n:03}.mkv"));
         let mut args: Vec<String> = vec!["-hide_banner".into(), "-loglevel".into(), "error".into(), "-nostats".into(), "-progress".into(), "pipe:1".into()];
         args.extend(self.p.plan.pre_input.iter().cloned());
-        args.extend(self.p.input.args.iter().cloned());
+        match &self.slot {
+            Some(slot) => args.extend(pipe_input_args(slot.width, slot.height, self.p.options.fps)),
+            None => args.extend(self.p.input.args.iter().cloned()),
+        }
         args.extend(self.p.plan.encode.iter().cloned());
         args.extend(["-f".into(), "matroska".into(), "-y".into(), path.to_string_lossy().into_owned()]);
         log::info!("recording segment {n}: ffmpeg {}", args.join(" "));
@@ -419,15 +452,35 @@ impl Runner {
                 }
             });
         }
-        let stdin = child.stdin.take();
+        let mut stdin = child.stdin.take();
+        // Frame streams: a feeder writes the latest frame at the recording rate (see frames.rs).
+        let feeder = match (&self.slot, stdin.take()) {
+            (Some(slot), Some(mut pipe)) => {
+                let (slot, stop, d, fps) = (slot.clone(), Arc::new(AtomicBool::new(false)), dropped.clone(), self.p.options.fps);
+                let stop2 = stop.clone();
+                let h = std::thread::Builder::new()
+                    .name("frame-feeder".into())
+                    .spawn(move || feed(&slot, &mut pipe, fps, &stop2, &d))
+                    .map_err(|e| AppError::Other(format!("could not start the frame writer: {e}")))?;
+                Some((h, stop))
+            }
+            (_, s) => {
+                stdin = s;
+                None
+            }
+        };
         self.snap.lock().segments = n as u32;
-        Ok(Segment { child, stdin, path, started: Instant::now(), frames, dropped, fps_milli, stderr })
+        Ok(Segment { child, stdin, path, started: Instant::now(), frames, dropped, fps_milli, stderr, feeder })
     }
 
     /// Asks FFmpeg to finish the segment and waits; kills it after the grace period.
     fn finish_segment(&mut self, mut s: Segment) -> Result<()> {
         let ran = s.started.elapsed();
-        if let Some(mut stdin) = s.stdin.take() {
+        if let Some((h, stop)) = s.feeder.take() {
+            // Closing the pipe (the feeder drops it) makes FFmpeg finish the file.
+            stop.store(true, Ordering::Release);
+            let _ = h.join();
+        } else if let Some(mut stdin) = s.stdin.take() {
             let _ = stdin.write_all(b"q\n");
             let _ = stdin.flush();
         }
@@ -444,17 +497,33 @@ impl Runner {
                 }
             }
         };
-        self.acc_ms += ran.as_millis() as u64;
-        self.acc_frames += s.frames.load(Ordering::Relaxed);
-        self.acc_dropped += s.dropped.load(Ordering::Relaxed);
-        if file_size(&s.path) == 0 {
-            return Err(AppError::Ffmpeg(format!("nothing was recorded: {}", s.stderr_tail())));
-        }
         if status.is_some_and(|st| !st.success()) {
             log::warn!("FFmpeg ended with {status:?}: {}", s.stderr_tail());
         }
+        // A part paused or stopped before its first frame holds no video (and may not even be a
+        // valid file); joining it would fail. Leave it out — it contains nothing.
+        if !self.segment_has_video(&s) {
+            log::info!("dropping part {} after {} ms: it holds no frames", s.path.display(), ran.as_millis());
+            let _ = std::fs::remove_file(&s.path);
+            return Ok(());
+        }
+        self.acc_ms += ran.as_millis() as u64;
+        self.acc_frames += s.frames.load(Ordering::Relaxed);
+        self.acc_dropped += s.dropped.load(Ordering::Relaxed);
         self.segments.push(s.path.clone());
         Ok(())
+    }
+
+    /// FFprobe can read a video stream with a duration from the part (or, without FFprobe, FFmpeg
+    /// reported frames and the file has more than a header).
+    fn segment_has_video(&self, s: &Segment) -> bool {
+        if file_size(&s.path) == 0 {
+            return false;
+        }
+        match &self.p.ffprobe {
+            Some(fp) => probe::probe(fp, &s.path).is_ok_and(|p| p.video_streams > 0 && p.duration_ms.unwrap_or(0) > 0),
+            None => s.frames.load(Ordering::Relaxed) > 0 && file_size(&s.path) > 4096,
+        }
     }
 
     fn update_progress(&mut self, seg: Option<&Segment>) {
@@ -476,7 +545,7 @@ impl Runner {
     /// Joins the segments into the final file, verifies it and adds it to the library.
     fn finalize(&mut self) -> Result<(PathBuf, String)> {
         if self.segments.is_empty() {
-            return Err(AppError::Ffmpeg("nothing was recorded".into()));
+            return Err(AppError::Ffmpeg("nothing was recorded (stopped before the first frame)".into()));
         }
         let final_path = unique_path(&self.p.output_dir, &self.p.file_stem, self.p.plan.extension);
         let tmp = final_path.with_extension(format!("part.{}", self.p.plan.extension));
@@ -567,7 +636,7 @@ mod tests {
         let ff = find_tool("ffmpeg", None, &[])?;
         let probe = find_tool("ffprobe", None, &[]).map(|t| PathBuf::from(t.path));
         // A synthetic source stands in for the screen: same pipeline, no display needed.
-        let input = CaptureInput { args: vec!["-re".into(), "-f".into(), "lavfi".into(), "-i".into(), "testsrc2=size=320x240:rate=30".into()], width: 320, height: 240 };
+        let input = CaptureInput { args: vec!["-re".into(), "-f".into(), "lavfi".into(), "-i".into(), "testsrc2=size=320x240:rate=30".into()], width: 320, height: 240, frames: None };
         let plan = EncodePlan {
             encoder: "libx264".into(),
             pre_input: vec![],
@@ -638,6 +707,82 @@ mod tests {
         assert!(std::fs::read_dir(dir.path()).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().starts_with(".enrecorder-")));
         assert_eq!(db.library_stats().unwrap().videos, 1);
         assert_eq!(db.query_i64("SELECT COUNT(*) FROM capture_sessions WHERE state = 'completed'").unwrap(), Some(1));
+    }
+
+    /// A frame source like Wayland/Windows: frames from a thread, at an uneven rate.
+    struct Synthetic {
+        stop: Arc<AtomicBool>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    }
+    impl FrameSource for Synthetic {
+        fn start(&mut self, slot: Arc<FrameSlot>) -> Result<()> {
+            let stop = self.stop.clone();
+            self.thread = Some(std::thread::spawn(move || {
+                let mut n = 0u8;
+                while !stop.load(Ordering::Acquire) {
+                    let frame = vec![n; 320 * 240 * 4];
+                    slot.push(&frame, 320, 240, 320 * 4, crate::capture::frames::PixelOrder::Bgrx, 0, 0);
+                    n = n.wrapping_add(7);
+                    std::thread::sleep(Duration::from_millis(if n.is_multiple_of(3) { 80 } else { 15 }));
+                }
+            }));
+            Ok(())
+        }
+        fn stop(&mut self) {
+            self.stop.store(true, Ordering::Release);
+            if let Some(t) = self.thread.take() {
+                let _ = t.join();
+            }
+        }
+    }
+
+    /// Frame-stream path with the real FFmpeg: raw frames through the pipe, a pause, stop.
+    #[test]
+    fn records_from_a_frame_stream() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let Some(mut p) = params(dir.path(), db.clone(), "mkv", 0) else { return };
+        let stop = Arc::new(AtomicBool::new(false));
+        p.input = CaptureInput { args: vec![], width: 320, height: 240, frames: Some(Box::new(Synthetic { stop: stop.clone(), thread: None })) };
+        let mut h = start(p, Arc::new(Record::default())).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1200));
+        h.send(Command::Pause).unwrap();
+        wait_state(&h, RecState::Paused);
+        h.send(Command::Resume).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1200));
+        h.send(Command::Stop).unwrap();
+        assert!(h.wait(Duration::from_secs(30)));
+        let s = h.snapshot();
+        assert_eq!(s.state, RecState::Completed, "{:?}", s.error);
+        assert!(stop.load(Ordering::Acquire), "the capture is stopped when the session ends");
+        let ff = find_tool("ffprobe", None, &[]).unwrap();
+        let pr = probe::probe(Path::new(&ff.path), Path::new(&s.output_path.unwrap())).unwrap();
+        let d = pr.duration_ms.unwrap();
+        assert!((1800..3500).contains(&d), "duration {d}");
+        assert_eq!((pr.width, pr.height), (Some(320), Some(240)));
+        assert!(s.frames > 40, "frames {}", s.frames);
+    }
+
+    /// Pausing right after the start leaves an empty first part; it is dropped, not joined.
+    #[test]
+    fn an_instant_pause_does_not_break_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let Some(p) = params(dir.path(), db.clone(), "mp4", 0) else { return };
+        let mut h = start(p, Arc::new(Record::default())).unwrap();
+        wait_state(&h, RecState::Recording);
+        h.send(Command::Pause).unwrap();
+        wait_state(&h, RecState::Paused);
+        h.send(Command::Resume).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1500));
+        h.send(Command::Stop).unwrap();
+        assert!(h.wait(Duration::from_secs(30)));
+        let s = h.snapshot();
+        assert_eq!(s.state, RecState::Completed, "{:?}", s.error);
+        assert!(s.elapsed_ms < 2500, "the empty part does not count: {}", s.elapsed_ms);
     }
 
     #[test]

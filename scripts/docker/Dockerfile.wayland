@@ -1,0 +1,13 @@
+# ENRecorder build + Wayland test image: endl-build plus PipeWire headers (the Wayland capture
+# backend links libpipewire) and a headless Wayland desktop for end-to-end portal tests:
+# sway (wlroots, headless backend), xdg-desktop-portal + -wlr, PipeWire and WirePlumber.
+#   docker build -t enrec-build -f scripts/docker/Dockerfile.wayland scripts/docker
+FROM endl-build
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libpipewire-0.3-dev libspa-0.2-dev clang libclang-dev \
+      sway xdg-desktop-portal xdg-desktop-portal-wlr pipewire wireplumber pipewire-pulse \
+      foot grim \
+    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends gstreamer1.0-pipewire gstreamer1.0-tools \
+    && rm -rf /var/lib/apt/lists/*

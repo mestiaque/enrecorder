@@ -42,8 +42,9 @@ strength of mocked tests alone.
 | Global shortcuts Ctrl+Shift+R (start/stop), Ctrl+Shift+P (pause/resume) | Done | fixed for now; customisable shortcuts later |
 | Quit while recording asks first, then stops and saves | Done | |
 | X11 window capture limits | Known | covered windows are captured too; a window keeps its starting size |
-| Wayland backend (xdg-desktop-portal ScreenCast + PipeWire) | Planned (phase 2, next) | the app explains this on Wayland; detection is done |
-| Windows backend (Windows.Graphics.Capture) | Planned (phase 2, next) | |
+| Wayland backend (xdg-desktop-portal ScreenCast → PipeWire via GStreamer `pipewiresrc` → frame pipe → FFmpeg) | Done | tested end to end on headless sway + xdg-desktop-portal-wlr (Docker); **not yet tested on GNOME/KDE Wayland hardware**. Portal cancel = recording cancelled with a message |
+| Frame-stream pipeline: one-frame slot, fixed-rate feeder, still frames repeated, late ticks counted as dropped | Done | shared by Wayland and (next) Windows |
+| Windows backend (Windows.Graphics.Capture) | Planned (phase 2, next) | will plug into the frame-stream pipeline |
 | Scheduled recording, file splitting | Planned (phase 6) | |
 | Audio in screen recordings | Planned (phase 3) | recordings are video only |
 

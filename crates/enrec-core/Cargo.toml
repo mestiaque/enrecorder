@@ -21,6 +21,16 @@ fs4 = { version = "0.13", features = ["sync"] }
 [dev-dependencies]
 tempfile = "3"
 
-# X11 capture backend: window and monitor lists (pure Rust XCB client, no C library needed).
+[features]
+# Wayland capture (xdg-desktop-portal ScreenCast + PipeWire through GStreamer's pipewiresrc).
+# The desktop app enables it; at run time it needs gstreamer1.0-pipewire and gstreamer1.0-tools.
+wayland = ["dep:ashpd", "dep:libc", "dep:tokio"]
+
 [target.'cfg(target_os = "linux")'.dependencies]
+# X11 capture backend: window and monitor lists (pure Rust XCB client, no C library needed).
 x11rb = { version = "0.13", features = ["randr"] }
+# Wayland: the portal client (D-Bus).
+ashpd = { version = "0.11", default-features = false, features = ["tokio"], optional = true }
+# Passing the portal's PipeWire descriptor to the GStreamer reader (dup2 in the child).
+libc = { version = "0.2", optional = true }
+tokio = { version = "1", features = ["rt", "time", "macros"], optional = true }

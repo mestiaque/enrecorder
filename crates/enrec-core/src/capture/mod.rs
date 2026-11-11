@@ -7,7 +7,10 @@
 //! Wayland (xdg-desktop-portal ScreenCast + PipeWire) and Windows (Windows.Graphics.Capture)
 //! are planned for the rest of phase 2.
 
+pub mod frames;
 pub mod state;
+#[cfg(all(target_os = "linux", feature = "wayland"))]
+pub mod wayland;
 #[cfg(target_os = "linux")]
 pub mod x11;
 
@@ -31,6 +34,9 @@ pub enum CaptureSource {
     Window { id: String, title: String, app: String, width: u32, height: u32 },
     /// Physical pixels in desktop coordinates.
     Region { x: i32, y: i32, width: u32, height: u32 },
+    /// Wayland: the desktop's sharing dialog lets the user pick a screen or window when the
+    /// recording starts; nothing can be captured without that choice.
+    Portal,
 }
 
 impl CaptureSource {
@@ -40,6 +46,7 @@ impl CaptureSource {
             CaptureSource::Monitor { .. } => "monitor",
             CaptureSource::Window { .. } => "window",
             CaptureSource::Region { .. } => "region",
+            CaptureSource::Portal => "portal",
         }
     }
 }
@@ -52,12 +59,19 @@ pub struct CaptureRequest {
     pub show_cursor: bool,
 }
 
-/// What FFmpeg reads: input arguments (before `-i …` included) and the captured size.
-#[derive(Debug, Clone, PartialEq)]
+/// What FFmpeg reads: either a device FFmpeg opens itself (`args`, including `-i …`), or
+/// frames ENRecorder delivers through a pipe (`frames`, `args` empty), plus the captured size.
 pub struct CaptureInput {
     pub args: Vec<String>,
     pub width: u32,
     pub height: u32,
+    pub frames: Option<Box<dyn frames::FrameSource>>,
+}
+
+impl std::fmt::Debug for CaptureInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CaptureInput").field("args", &self.args).field("width", &self.width).field("height", &self.height).field("frames", &self.frames.is_some()).finish()
+    }
 }
 
 pub trait CaptureBackend: Send + Sync {

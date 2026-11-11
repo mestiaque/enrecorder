@@ -3,7 +3,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 mkdir -p "$HOME/.cargo/registry"
-IMAGE="${ENDL_IMAGE:-endl-build}"
+IMAGE="${ENDL_IMAGE:-enrec-build}"
+docker image inspect "$IMAGE" >/dev/null 2>&1 || IMAGE=endl-build
 docker image inspect "$IMAGE" >/dev/null 2>&1 || IMAGE=lumen-build
 # A passwd entry for the host user (dbus refuses to start for an unknown UID).
 mkdir -p "$ROOT/target"

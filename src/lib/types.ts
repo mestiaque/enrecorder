@@ -163,7 +163,8 @@ export type CaptureSource =
   | { type: "desktop"; width: number; height: number }
   | { type: "monitor"; id: string; name: string; width: number; height: number; x: number; y: number; primary: boolean }
   | { type: "window"; id: string; title: string; app: string; width: number; height: number }
-  | { type: "region"; x: number; y: number; width: number; height: number };
+  | { type: "region"; x: number; y: number; width: number; height: number }
+  | { type: "portal" };
 
 export interface SourcesPayload {
   backend: "x11" | "waylandPortal" | "windowsGraphicsCapture" | null;

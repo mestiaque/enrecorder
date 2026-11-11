@@ -72,3 +72,32 @@ PipeWire, then Windows.Graphics.Capture), FFmpeg recording pipeline, recording H
 * Wayland and Windows backends are not built yet (next).
 * No audio in recordings (phase 3). Shortcuts are fixed (customisable later).
 * X11 window capture records whatever covers the window; resizing is not followed.
+
+## Phase 2, part 2 — Wayland screen recording (2026-11-11)
+
+**Implemented**
+* `capture::frames`: frame-stream input for backends that deliver frames themselves — a
+  one-frame slot (newest wins, replaced frames counted), a feeder that writes at the recording
+  frame rate (repeats still frames, counts late ticks as dropped), raw `bgr0` pipe into FFmpeg.
+  Memory is bounded to one frame whatever the length of the recording.
+* `capture::wayland`: xdg-desktop-portal ScreenCast via `ashpd` (cursor embedded/hidden as
+  chosen, monitor or window, no persistence), PipeWire node read by GStreamer's `pipewiresrc`
+  (the Rust PipeWire bindings need PipeWire ≥ 0.3.65; Ubuntu 22.04 ships 0.3.48). Portal
+  cancellation is reported as "screen sharing was cancelled".
+* Session: frame streams start while preparing, so the countdown and "recording" begin only
+  once pictures arrive; parts without any frame (pause/stop right after start) are dropped
+  instead of breaking the join.
+* App: Wayland sessions use the portal backend; the Video Recorder shows "Choose in the
+  sharing dialog". The .deb depends on gstreamer1.0-pipewire and gstreamer1.0-tools.
+* New app icon (from the user's design).
+
+**Tests executed**
+* `cargo test -p enrec-core`: 55 passed (new: frame slot crop/pad/swap, skipped-frame counting,
+  feeder rate, frame-stream recording with real FFmpeg, instant pause).
+* `scripts/test/wayland-e2e.sh` in `enrec-build` (Docker): headless sway 1.7 + PipeWire 0.3.48 +
+  WirePlumber + xdg-desktop-portal(-wlr 0.5): portal granted 1280×720, recorded 3 s + pause +
+  2 s → 5.0 s MP4, 150 frames, 0 dropped, 30 fps.
+
+**Known limitations**
+* Not yet tested on GNOME or KDE Wayland on real hardware.
+* Windows backend still to come (next).

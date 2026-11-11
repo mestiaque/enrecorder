@@ -237,7 +237,7 @@ mod tests {
     }
 
     fn input(w: u32, h: u32) -> CaptureInput {
-        CaptureInput { args: vec![], width: w, height: h }
+        CaptureInput { args: vec![], width: w, height: h, frames: None }
     }
 
     #[test]
