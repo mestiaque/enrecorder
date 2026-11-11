@@ -34,7 +34,7 @@ fn main() {
         let caps = check_capabilities(&ff).unwrap();
         let backend = WaylandBackend::new().expect("wayland");
         println!("sources: {:?}", backend.list_sources().unwrap());
-        let options = RecordingOptions { source: CaptureSource::Portal, fps: 30, resolution: "native".into(), format: "mp4".into(), codec: Codec::H264, encoder: "libx264".into(), quality: "balanced".into(), show_cursor: true, countdown: 0, max_minutes: 0 };
+        let options = RecordingOptions { source: CaptureSource::Portal, fps: 30, resolution: "native".into(), format: "mp4".into(), codec: Codec::H264, encoder: "libx264".into(), quality: "balanced".into(), show_cursor: true, countdown: 0, max_minutes: 0, audio: Default::default() };
         let input = backend.input(&CaptureRequest { source: CaptureSource::Portal, fps: 30, show_cursor: true }).expect("portal");
         println!("granted {}x{}", input.width, input.height);
         let plan = plan(&options, &input, &caps).unwrap();

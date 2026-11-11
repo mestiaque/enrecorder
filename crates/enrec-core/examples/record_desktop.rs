@@ -26,7 +26,7 @@ fn main() {
         let caps = check_capabilities(&ff).unwrap();
         let backend = X11Backend::new().unwrap();
         let source = backend.list_sources().unwrap()[0].clone();
-        let options = RecordingOptions { source: source.clone(), fps: 30, resolution: "native".into(), format: "mp4".into(), codec: Codec::H264, encoder, quality: "balanced".into(), show_cursor: true, countdown: 0, max_minutes: 0 };
+        let options = RecordingOptions { source: source.clone(), fps: 30, resolution: "native".into(), format: "mp4".into(), codec: Codec::H264, encoder, quality: "balanced".into(), show_cursor: true, countdown: 0, max_minutes: 0, audio: Default::default() };
         let input = backend.input(&CaptureRequest { source, fps: 30, show_cursor: true }).unwrap();
         let plan = plan(&options, &input, &caps).unwrap();
         println!("encoder: {}", plan.encoder);

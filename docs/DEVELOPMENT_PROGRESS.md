@@ -121,3 +121,38 @@ PipeWire, then Windows.Graphics.Capture), FFmpeg recording pipeline, recording H
 **Known limitations**
 * Not run on real Windows yet (no Windows machine here); the CI Windows job builds it.
 * A captured window is grabbed from the screen (covering windows are captured too).
+
+## Phase 3 — Audio (2026-11-11)
+
+**Implemented**
+* `audio`: device enumeration (`pactl -f json list sources` on Linux — PulseAudio or
+  pipewire-pulse, monitors of outputs = system audio, both `monitor_of_sink` and pactl 15.99's
+  `monitor_source`; DirectShow on Windows with loopback devices as system audio), FFmpeg inputs
+  (`pulse` / `dshow`), the audio plan: per-source volume, `amix` (no normalisation) or separate
+  tracks, `aresample=async=1` drift correction, AAC/Opus for video containers, MP3/M4A/Opus/FLAC/WAV
+  for audio-only files, and a live peak meter (`astats` through FFmpeg's log: file/pipe outputs are
+  buffered until exit).
+* Recording session: audio inputs in the same FFmpeg process as the video (one clock, same
+  segments, so pause/resume keeps sync), audio-only sessions (verified for audio, `kind = audio`
+  rows), meter value in the snapshot, the segment join maps every stream (separate tracks kept).
+* App: `list_audio_devices`, `start_audio_recording`; settings for screen-recording audio and the
+  Audio Recorder; the Audio Recorder stays visible (no hide, no floating bar).
+* UI: Audio section in Recording settings (microphone, system audio, separate tracks), level meter
+  and audio info in the live panel, a working Audio Recorder page.
+
+**Tests executed**
+* `cargo test -p enrec-core`: 63 passed — new: pactl/dshow parsing, plans (mix, separate, meter),
+  levels, formats; real FFmpeg sessions: video + two mixed sources across a pause (meter reads),
+  audio-only MP3, separate tracks surviving the join in M4A.
+* `scripts/test/audio-e2e.sh` (PipeWire + WirePlumber + pipewire-pulse in `enrec-build`): a virtual
+  speaker playing 440 Hz and a virtual microphone (pipe source) playing 880 Hz are listed as system
+  audio / microphone (both default); MP3 (mixed) and M4A recordings with pause complete, meter
+  -14.5 / -21 dB, files hold the tones.
+* `scripts/test/smoke-audio.sh` (Xvfb, UI driven): Audio Recorder → Start → Ctrl+Shift+P twice →
+  Ctrl+Shift+R → 4.8 s MP3 in `~/Videos/ENRecorder/Audio`, library row `audio`, session completed.
+* Windows cross-build: core clippy clean, app check clean. `cargo clippy -D warnings` (core with
+  examples, app): clean. `pnpm typecheck`: clean; `pnpm test`: 9 passed.
+
+**Known limitations**
+* Windows system audio needs a loopback device (Stereo Mix / virtual cable).
+* Volume sliders are not in the UI yet (the engine supports them; editor phase).

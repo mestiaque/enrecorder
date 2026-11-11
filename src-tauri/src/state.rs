@@ -43,6 +43,11 @@ impl AppState {
         self.settings.read().recordings_folder(&self.system_videos)
     }
 
+    /// Audio Recorder files: an "Audio" folder inside the recordings folder.
+    pub fn audio_folder(&self) -> PathBuf {
+        self.recordings_folder().join("Audio")
+    }
+
     pub fn screenshots_folder(&self) -> PathBuf {
         self.settings.read().screenshots_folder(&self.system_pictures)
     }

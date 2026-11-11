@@ -19,6 +19,13 @@ export interface Settings {
   recMaxMinutes: number;
   recHideWindow: boolean;
   recShowHud: boolean;
+  recMic: string;
+  recSystemAudio: string;
+  recSeparateTracks: boolean;
+  audioMic: string;
+  audioSystem: string;
+  audioFormat: AudioFormat;
+  audioQuality: "high" | "balanced" | "small";
   theme: "dark" | "light" | "glass" | "system";
   accent: string;
   animations: boolean;
@@ -192,6 +199,10 @@ export interface RecordingSnapshot {
   recordingId: string | null;
   error: string | null;
   notice: string | null;
+  /** Peak level of the last 0.1 s in dBFS (-120…0) while audio is recorded. */
+  audioLevel: number | null;
+  audioTracks: number;
+  audioOnly: boolean;
 }
 
 export interface RecordingOptions {
@@ -203,6 +214,32 @@ export interface RecordingOptions {
   encoder: string;
   quality: string;
   showCursor: boolean;
+  countdown: number;
+  maxMinutes: number;
+  audio?: AudioOptions;
+}
+
+export type AudioFormat = "mp3" | "m4a" | "opus" | "flac" | "wav";
+
+export interface AudioDevice {
+  id: string;
+  name: string;
+  kind: "microphone" | "system";
+  default: boolean;
+}
+
+export interface AudioOptions {
+  microphone: string | null;
+  system: string | null;
+  separateTracks: boolean;
+  micVolume: number;
+  systemVolume: number;
+}
+
+export interface AudioRecordingOptions {
+  audio: AudioOptions;
+  format: AudioFormat;
+  quality: string;
   countdown: number;
   maxMinutes: number;
 }

@@ -4,6 +4,7 @@ import { cn, formatBytes, formatDuration } from "../../lib/format";
 import type { RecordingSnapshot } from "../../lib/types";
 import { toast } from "../../store/ui";
 import { Button, Kbd } from "../ui/primitives";
+import { AudioMeter } from "./AudioMeter";
 
 const STATE: Record<string, string> = { preparing: "Starting…", countdown: "Starting…", recording: "Recording", paused: "Paused", finalizing: "Saving…" };
 
@@ -33,17 +34,29 @@ export function LivePanel({ snap }: { snap: RecordingSnapshot }) {
           </Button>
         </div>
       </div>
-      <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-4 text-[12px] sm:grid-cols-5">
-        <Info label="Size" value={`${snap.width}×${snap.height}`} />
-        <Info label="Encoder" value={snap.encoder} />
-        <Info label="File so far" value={formatBytes(snap.sizeBytes)} />
-        <Info label="Frame rate" value={snap.fps ? `${snap.fps.toFixed(1)} fps` : "—"} />
-        <Info label="Dropped frames" value={String(snap.dropped)} warn={snap.dropped > 0} />
-      </div>
+      {snap.audioTracks > 0 && <AudioMeter level={rec ? snap.audioLevel : null} className="mt-5" />}
+      {snap.audioOnly ? (
+        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-4 text-[12px] sm:grid-cols-3">
+          <Info label="Format" value={snap.encoder} />
+          <Info label="File so far" value={formatBytes(snap.sizeBytes)} />
+          <Info label="Tracks" value={String(snap.audioTracks)} />
+        </div>
+      ) : (
+        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-4 text-[12px] sm:grid-cols-6">
+          <Info label="Size" value={`${snap.width}×${snap.height}`} />
+          <Info label="Encoder" value={snap.encoder} />
+          <Info label="File so far" value={formatBytes(snap.sizeBytes)} />
+          <Info label="Frame rate" value={snap.fps ? `${snap.fps.toFixed(1)} fps` : "—"} />
+          <Info label="Dropped frames" value={String(snap.dropped)} warn={snap.dropped > 0} />
+          <Info label="Audio" value={snap.audioTracks ? `${snap.audioTracks} track${snap.audioTracks > 1 ? "s" : ""}` : "Off"} />
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-faint">
-        <span>
-          <Kbd>Ctrl+Shift+R</Kbd> stop
-        </span>
+        {!snap.audioOnly && (
+          <span>
+            <Kbd>Ctrl+Shift+R</Kbd> stop
+          </span>
+        )}
         <span>
           <Kbd>Ctrl+Shift+P</Kbd> pause / resume
         </span>

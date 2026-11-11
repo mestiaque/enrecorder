@@ -1,7 +1,7 @@
 /** What to record (the rest of the form lives in Settings) and how to start from anywhere. */
 import { create } from "zustand";
 import { api, errorMessage } from "../lib/api";
-import type { CaptureSource, RecordingOptions, Settings } from "../lib/types";
+import type { AudioDevice, AudioOptions, CaptureSource, RecordingOptions, Settings } from "../lib/types";
 import { useNav } from "./nav";
 import { useSettings } from "./settings";
 import { toast } from "./ui";
@@ -15,6 +15,28 @@ export const useRecorderForm = create<FormStore>((set) => ({
   source: null,
   setSource: (source) => set({ source }),
 }));
+
+/** A stored device choice → the device to open: "" off, "default" the system default. */
+export function resolveDevice(choice: string, kind: AudioDevice["kind"], devices: AudioDevice[]): string | null {
+  if (!choice) return null;
+  if (choice !== "default") return choice;
+  const list = devices.filter((d) => d.kind === kind);
+  return (list.find((d) => d.default) ?? list[0])?.id ?? null;
+}
+
+export function audioFrom(mic: string, system: string, separate: boolean, devices: AudioDevice[]): AudioOptions {
+  return { microphone: resolveDevice(mic, "microphone", devices), system: resolveDevice(system, "system", devices), separateTracks: separate, micVolume: 100, systemVolume: 100 };
+}
+
+let deviceCache: AudioDevice[] = [];
+async function devices(): Promise<AudioDevice[]> {
+  try {
+    deviceCache = await api.listAudioDevices();
+  } catch {
+    /* keep the last list */
+  }
+  return deviceCache;
+}
 
 export function optionsFrom(s: Settings, source: CaptureSource): RecordingOptions {
   return {
@@ -40,7 +62,10 @@ export async function startRecording(): Promise<boolean> {
     return false;
   }
   try {
-    await api.startRecording(optionsFrom(useSettings.getState().settings, source));
+    const s = useSettings.getState().settings;
+    const opts = optionsFrom(s, source);
+    if (s.recMic || s.recSystemAudio) opts.audio = audioFrom(s.recMic, s.recSystemAudio, s.recSeparateTracks, await devices());
+    await api.startRecording(opts);
     return true;
   } catch (e) {
     useNav.getState().go("video");

@@ -46,6 +46,16 @@ pub struct Settings {
     pub rec_hide_window: bool,
     /// Show the floating recording controls.
     pub rec_show_hud: bool,
+    /// Audio in screen recordings: device id, "" = off, "default" = system default (phase 3).
+    pub rec_mic: String,
+    pub rec_system_audio: String,
+    /// Microphone and system audio on separate tracks instead of one mix.
+    pub rec_separate_tracks: bool,
+    /// Audio Recorder: devices ("" = off), format and quality.
+    pub audio_mic: String,
+    pub audio_system: String,
+    pub audio_format: String,
+    pub audio_quality: String,
     // Appearance
     /// "dark" | "light" | "glass" | "system"
     pub theme: String,
@@ -75,6 +85,13 @@ impl Default for Settings {
             rec_max_minutes: 0,
             rec_hide_window: true,
             rec_show_hud: true,
+            rec_mic: String::new(),
+            rec_system_audio: String::new(),
+            rec_separate_tracks: false,
+            audio_mic: "default".into(),
+            audio_system: String::new(),
+            audio_format: "mp3".into(),
+            audio_quality: "balanced".into(),
             theme: "dark".into(),
             accent: "#6366f1".into(),
             animations: true,
@@ -137,6 +154,17 @@ impl Settings {
             self.rec_countdown = d.rec_countdown;
         }
         self.rec_max_minutes = self.rec_max_minutes.min(24 * 60);
+        for dev in [&mut self.rec_mic, &mut self.rec_system_audio, &mut self.audio_mic, &mut self.audio_system] {
+            if dev.len() > 300 || dev.chars().any(|c| c.is_control()) {
+                dev.clear();
+            }
+        }
+        if !crate::audio::AUDIO_FORMATS.contains(&self.audio_format.as_str()) {
+            self.audio_format = d.audio_format;
+        }
+        if !matches!(self.audio_quality.as_str(), "high" | "balanced" | "small") {
+            self.audio_quality = d.audio_quality;
+        }
         if !matches!(self.language.as_str(), "en") {
             self.language = d.language;
         }

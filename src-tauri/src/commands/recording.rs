@@ -94,6 +94,71 @@ pub async fn start_video_recording(app: AppHandle, options: RecordingOptions) ->
     .await
 }
 
+/// Microphones and system-audio sources (PulseAudio/PipeWire on Linux, DirectShow on Windows).
+#[tauri::command]
+pub async fn list_audio_devices(app: AppHandle) -> Result<Vec<enrec_core::audio::AudioDevice>> {
+    blocking(move || {
+        let ffmpeg = app.state::<AppState>().tools.read().ffmpeg.clone().map(|t| PathBuf::from(t.path));
+        enrec_core::audio::list_devices(ffmpeg.as_deref())
+    })
+    .await
+}
+
+/// "Audio 2026-11-11 10-02-33".
+fn audio_stem() -> String {
+    file_stem().replacen("Recording", "Audio", 1)
+}
+
+/// Audio Recorder: microphone and/or system audio to MP3/M4A/Opus/FLAC/WAV, same session
+/// engine as video (segments on pause, verified file, library row).
+#[tauri::command]
+pub async fn start_audio_recording(app: AppHandle, options: enrec_core::recording::AudioRecordingOptions) -> Result<Snapshot> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        if state.recording_active() {
+            return Err(AppError::Other("A recording is already running".into()));
+        }
+        let tools = state.tools.read().clone();
+        let ffmpeg = tools.ffmpeg.ok_or(AppError::FfmpegMissing)?;
+        let output_dir = state.audio_folder();
+        check_output_folder(&output_dir.to_string_lossy())?;
+        let plan = enrec_core::recording::plan_audio(&options)?;
+        // The session needs video-shaped options for its timing fields; the source is unused.
+        let rec_opts = RecordingOptions {
+            source: CaptureSource::Desktop { width: 0, height: 0 },
+            fps: 30,
+            resolution: "native".into(),
+            format: options.format.clone(),
+            codec: enrec_core::media::ffmpeg::Codec::H264,
+            encoder: plan.encoder.clone(),
+            quality: options.quality.clone(),
+            show_cursor: false,
+            countdown: options.countdown.min(10),
+            max_minutes: options.max_minutes,
+            audio: options.audio.clone(),
+        };
+        let observer = Arc::new(UiObserver { app: app.clone(), last_progress: Mutex::new(Instant::now() - Duration::from_secs(1)) });
+        let handle = session::start(
+            session::StartParams {
+                db: state.db.clone(),
+                ffmpeg: PathBuf::from(&ffmpeg.path),
+                ffprobe: tools.ffprobe.map(|t| PathBuf::from(t.path)),
+                input: enrec_core::capture::CaptureInput { args: vec![], width: 0, height: 0, frames: None },
+                plan,
+                options: rec_opts,
+                output_dir,
+                file_stem: audio_stem(),
+                min_free_bytes: MIN_FREE,
+            },
+            observer,
+        )?;
+        let snap = handle.snapshot();
+        *state.recorder.lock() = Some(handle);
+        Ok(snap)
+    })
+    .await
+}
+
 fn send(state: &AppState, cmd: Command) -> Result<()> {
     match state.recorder.lock().as_ref() {
         Some(h) if h.is_active() => h.send(cmd),
@@ -188,6 +253,8 @@ fn on_state(app: &AppHandle, s: &Snapshot) {
         (st.rec_hide_window, st.rec_show_hud)
     };
     crate::tray::show_recording(app, s.state);
+    // The Audio Recorder stays visible: its level meter is the feedback.
+    let (hide, hud) = if s.audio_only { (false, false) } else { (hide, hud) };
     match s.state {
         RecState::Recording if s.segments <= 1 => {
             if hud {

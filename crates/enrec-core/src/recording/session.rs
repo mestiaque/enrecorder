@@ -62,6 +62,11 @@ pub struct Snapshot {
     /// Something the user should know that did not fail the recording (e.g. stopped because the
     /// disk is almost full, or the time limit was reached).
     pub notice: Option<String>,
+    /// Peak audio level of the last 0.1 s in dBFS (-120…0), when audio is recorded.
+    pub audio_level: Option<f64>,
+    /// Audio tracks in the recording (0 = no audio).
+    pub audio_tracks: u32,
+    pub audio_only: bool,
 }
 
 pub trait Observer: Send + Sync + 'static {
@@ -150,15 +155,18 @@ pub fn start(p: StartParams, observer: Arc<dyn Observer>) -> Result<SessionHandl
         encoder: p.plan.encoder.clone(),
         width: p.plan.width,
         height: p.plan.height,
-        source: p.options.source.kind_label().into(),
+        source: if p.plan.audio_only { "audio".into() } else { p.options.source.kind_label().into() },
         output_path: None,
         recording_id: None,
         error: None,
         notice: None,
+        audio_level: None,
+        audio_tracks: p.plan.audio_inputs.iter().filter(|a| *a == "-i").count() as u32,
+        audio_only: p.plan.audio_only,
     };
     p.db.insert_session(&NewSession {
         id: id.clone(),
-        kind: "video".into(),
+        kind: if p.plan.audio_only { "audio".into() } else { "video".into() },
         state: "preparing".into(),
         source: serde_json::to_string(&p.options.source)?,
         settings: serde_json::to_string(&p.options)?,
@@ -169,7 +177,7 @@ pub fn start(p: StartParams, observer: Arc<dyn Observer>) -> Result<SessionHandl
     let shared = snap.clone();
     let thread = std::thread::Builder::new()
         .name(format!("recording-{}", &id[..8]))
-        .spawn(move || Runner { p, obs: observer, snap: shared, rx, seg_dir: PathBuf::new(), segments: Vec::new(), acc_ms: 0, acc_frames: 0, acc_dropped: 0, source: None, slot: None }.run())
+        .spawn(move || Runner { p, obs: observer, snap: shared, rx, seg_dir: PathBuf::new(), segments: Vec::new(), acc_ms: 0, acc_frames: 0, acc_dropped: 0, source: None, slot: None, level: Arc::new(AtomicU64::new(0)) }.run())
         .map_err(|e| AppError::Other(format!("could not start the recording thread: {e}")))?;
     Ok(SessionHandle { tx, snap, thread: Some(thread) })
 }
@@ -209,6 +217,8 @@ struct Runner {
     /// Frame-stream backends (Wayland, Windows): the capture and its latest-frame slot.
     source: Option<Box<dyn FrameSource>>,
     slot: Option<Arc<FrameSlot>>,
+    /// Latest meter value: (dBFS + 120) × 100, 0 = none yet.
+    level: Arc<AtomicU64>,
 }
 
 impl Drop for Runner {
@@ -394,12 +404,15 @@ impl Runner {
     fn start_segment(&mut self) -> Result<Segment> {
         let n = self.segments.len() + 1;
         let path = self.seg_dir.join(format!("part-{n:03}.mkv"));
-        let mut args: Vec<String> = vec!["-hide_banner".into(), "-loglevel".into(), "error".into(), "-nostats".into(), "-progress".into(), "pipe:1".into()];
+        // The audio level meter reports through the log at "info" level.
+        let loglevel = if self.p.plan.audio_inputs.is_empty() { "error" } else { "info" };
+        let mut args: Vec<String> = vec!["-hide_banner".into(), "-loglevel".into(), loglevel.into(), "-nostats".into(), "-progress".into(), "pipe:1".into()];
         args.extend(self.p.plan.pre_input.iter().cloned());
         match &self.slot {
             Some(slot) => args.extend(pipe_input_args(slot.width, slot.height, self.p.options.fps)),
             None => args.extend(self.p.input.args.iter().cloned()),
         }
+        args.extend(self.p.plan.audio_inputs.iter().cloned());
         args.extend(self.p.plan.encode.iter().cloned());
         args.extend(["-f".into(), "matroska".into(), "-y".into(), path.to_string_lossy().into_owned()]);
         log::info!("recording segment {n}: ffmpeg {}", args.join(" "));
@@ -432,6 +445,7 @@ impl Runner {
         }
         if let Some(mut err) = child.stderr.take() {
             let buf = stderr.clone();
+            let level = self.level.clone();
             std::thread::spawn(move || {
                 let mut text = String::new();
                 let mut chunk = [0u8; 4096];
@@ -443,6 +457,19 @@ impl Runner {
                     let mut b = buf.lock();
                     while let Some(i) = text.find('\n') {
                         let line: String = text.drain(..=i).collect();
+                        // Level meter lines (and their "frame:" headers) are not errors.
+                        if let Some(db) = crate::audio::parse_level(&line) {
+                            level.store(((db + 120.0) * 100.0) as u64, Ordering::Relaxed);
+                            continue;
+                        }
+                        if line.contains("Parsed_ametadata") || line.contains("Parsed_astats") || line.starts_with("frame:") {
+                            continue;
+                        }
+                        // At "info" (audio meter on) FFmpeg also prints its stream summary.
+                        if line.starts_with(' ') || line.starts_with("Input #") || line.starts_with("Output #") || line.starts_with("Stream mapping") || line.starts_with("Press [q]") {
+                            log::debug!(target: "ffmpeg", "{}", line.trim_end());
+                            continue;
+                        }
                         log::warn!(target: "ffmpeg", "{}", line.trim_end());
                         b.push(line.trim_end().to_string());
                         if b.len() > 30 {
@@ -520,9 +547,10 @@ impl Runner {
         if file_size(&s.path) == 0 {
             return false;
         }
+        let audio_only = self.p.plan.audio_only;
         match &self.p.ffprobe {
-            Some(fp) => probe::probe(fp, &s.path).is_ok_and(|p| p.video_streams > 0 && p.duration_ms.unwrap_or(0) > 0),
-            None => s.frames.load(Ordering::Relaxed) > 0 && file_size(&s.path) > 4096,
+            Some(fp) => probe::probe(fp, &s.path).is_ok_and(|p| (if audio_only { p.audio_streams } else { p.video_streams }) > 0 && p.duration_ms.unwrap_or(0) > 0),
+            None => (audio_only || s.frames.load(Ordering::Relaxed) > 0) && file_size(&s.path) > 4096,
         }
     }
 
@@ -536,6 +564,10 @@ impl Runner {
             s.dropped = self.acc_dropped + seg.map_or(0, |g| g.dropped.load(Ordering::Relaxed));
             if let Some(g) = seg {
                 s.fps = g.fps_milli.load(Ordering::Relaxed) as f64 / 1000.0;
+            }
+            if s.audio_tracks > 0 {
+                let l = self.level.load(Ordering::Relaxed);
+                s.audio_level = (l > 0).then(|| l as f64 / 100.0 - 120.0);
             }
             s.clone()
         };
@@ -558,12 +590,18 @@ impl Runner {
             let fmt = match self.p.plan.extension {
                 "webm" => "webm",
                 "mkv" => "matroska",
+                "m4a" => "ipod",
+                "mp3" => "mp3",
+                "opus" => "opus",
+                "flac" => "flac",
+                "wav" => "wav",
                 _ => "mp4",
             };
             let mut args: Vec<String> = ["-hide_banner", "-loglevel", "error", "-nostdin", "-f", "concat", "-safe", "0", "-i"].iter().map(|s| s.to_string()).collect();
             args.push(list.to_string_lossy().into_owned());
-            args.extend(["-c".into(), "copy".into()]);
-            if fmt == "mp4" {
+            // Every stream: separate audio tracks would otherwise be reduced to one.
+            args.extend(["-map".into(), "0".into(), "-c".into(), "copy".into()]);
+            if fmt == "mp4" || fmt == "ipod" {
                 args.extend(["-movflags".into(), "+faststart".into()]);
             }
             args.extend(["-f".into(), fmt.into(), "-y".into(), tmp.to_string_lossy().into_owned()]);
@@ -577,8 +615,9 @@ impl Runner {
         let probe = match &self.p.ffprobe {
             Some(fp) => {
                 let pr = probe::probe(fp, &tmp)?;
-                if pr.video_streams == 0 || pr.duration_ms.unwrap_or(0) <= 0 {
-                    return Err(AppError::Ffmpeg("the finished file has no readable video".into()));
+                let streams = if self.p.plan.audio_only { pr.audio_streams } else { pr.video_streams };
+                if streams == 0 || pr.duration_ms.unwrap_or(0) <= 0 {
+                    return Err(AppError::Ffmpeg(format!("the finished file has no readable {}", if self.p.plan.audio_only { "audio" } else { "video" })));
                 }
                 Some(pr)
             }
@@ -593,14 +632,14 @@ impl Runner {
         let session_id = self.snap.lock().session_id.clone();
         let rec_id = self.p.db.insert_recording(
             &NewRecording {
-                kind: "video".into(),
+                kind: if self.p.plan.audio_only { "audio".into() } else { "video".into() },
                 title,
                 path: final_path.to_string_lossy().into_owned(),
                 container: Some(self.p.plan.extension.into()),
                 duration_ms: probe.as_ref().and_then(|p| p.duration_ms).or(Some(self.acc_ms as i64)),
                 size_bytes: size as i64,
-                width: probe.as_ref().and_then(|p| p.width).or(Some(self.p.plan.width as i64)),
-                height: probe.as_ref().and_then(|p| p.height).or(Some(self.p.plan.height as i64)),
+                width: probe.as_ref().and_then(|p| p.width).or((!self.p.plan.audio_only).then_some(self.p.plan.width as i64)),
+                height: probe.as_ref().and_then(|p| p.height).or((!self.p.plan.audio_only).then_some(self.p.plan.height as i64)),
                 session_id: Some(session_id),
             },
             probe.as_ref(),
@@ -638,6 +677,8 @@ mod tests {
         // A synthetic source stands in for the screen: same pipeline, no display needed.
         let input = CaptureInput { args: vec!["-re".into(), "-f".into(), "lavfi".into(), "-i".into(), "testsrc2=size=320x240:rate=30".into()], width: 320, height: 240, frames: None };
         let plan = EncodePlan {
+            audio_inputs: vec![],
+            audio_only: false,
             encoder: "libx264".into(),
             pre_input: vec![],
             encode: ["-vf", "format=yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-an"].iter().map(|s| s.to_string()).collect(),
@@ -656,6 +697,7 @@ mod tests {
             show_cursor: true,
             countdown,
             max_minutes: 0,
+            audio: Default::default(),
         };
         Some(StartParams { db, ffmpeg: PathBuf::from(ff.path), ffprobe: probe, input, plan, options, output_dir: dir.to_path_buf(), file_stem: "Test recording".into(), min_free_bytes: 0 })
     }
@@ -811,5 +853,102 @@ mod tests {
         assert_eq!(s.state, RecState::Failed);
         assert!(s.error.unwrap().contains("could not start"));
         assert_eq!(db.query_i64("SELECT COUNT(*) FROM capture_sessions WHERE state = 'failed' AND error IS NOT NULL").unwrap(), Some(1));
+    }
+
+    fn strs(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Video plus two audio sources (sine tones stand in for the microphone and system audio),
+    /// mixed by the real audio plan, across a pause.
+    #[test]
+    fn records_video_with_mixed_audio_across_a_pause() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let Some(mut p) = params(dir.path(), db.clone(), "mp4", 0) else { return };
+        let opts = crate::audio::AudioOptions { microphone: Some("m".into()), system: Some("s".into()), separate_tracks: false, mic_volume: 100, system_volume: 100 };
+        let ap = crate::audio::plan(&opts, 1, crate::audio::codec_for("mp4"), true);
+        p.plan.audio_inputs = strs(&["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=48000"]);
+        p.plan.encode.retain(|a| a != "-an");
+        p.plan.encode.extend(strs(&["-map", "0:v"]));
+        p.plan.encode.extend(ap.output);
+        let mut h = start(p, Arc::new(Record::default())).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1200));
+        assert!(h.snapshot().audio_level.is_some_and(|l| l > -40.0), "meter {:?}", h.snapshot().audio_level);
+        h.send(Command::Pause).unwrap();
+        wait_state(&h, RecState::Paused);
+        h.send(Command::Resume).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1200));
+        h.send(Command::Stop).unwrap();
+        assert!(h.wait(Duration::from_secs(30)));
+        let s = h.snapshot();
+        assert_eq!(s.state, RecState::Completed, "{:?}", s.error);
+        let ff = find_tool("ffprobe", None, &[]).unwrap();
+        let pr = probe::probe(Path::new(&ff.path), Path::new(s.output_path.as_ref().unwrap())).unwrap();
+        assert_eq!((pr.video_streams, pr.audio_streams, pr.audio_codec.as_deref()), (1, 1, Some("aac")));
+    }
+
+    /// Audio Recorder: audio only, separate tracks off, MP3 out.
+    #[test]
+    fn records_audio_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let Some(mut p) = params(dir.path(), db.clone(), "mp3", 0) else { return };
+        let opts = crate::recording::AudioRecordingOptions { audio: crate::audio::AudioOptions { microphone: Some("m".into()), ..Default::default() }, format: "mp3".into(), quality: "balanced".into(), countdown: 0, max_minutes: 0 };
+        let mut plan = crate::recording::plan_audio(&opts).unwrap();
+        plan.audio_inputs = strs(&["-re", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000"]);
+        p.plan = plan;
+        p.input = CaptureInput { args: vec![], width: 0, height: 0, frames: None };
+        let mut h = start(p, Arc::new(Record::default())).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1500));
+        h.send(Command::Stop).unwrap();
+        assert!(h.wait(Duration::from_secs(30)));
+        let s = h.snapshot();
+        assert_eq!(s.state, RecState::Completed, "{:?}", s.error);
+        assert!(s.audio_only);
+        let out = PathBuf::from(s.output_path.unwrap());
+        assert_eq!(out.extension().unwrap(), "mp3");
+        let ff = find_tool("ffprobe", None, &[]).unwrap();
+        let pr = probe::probe(Path::new(&ff.path), &out).unwrap();
+        assert_eq!((pr.video_streams, pr.audio_streams, pr.audio_codec.as_deref()), (0, 1, Some("mp3")));
+        assert!(pr.duration_ms.unwrap() > 900);
+        assert_eq!(db.query_i64("SELECT COUNT(*) FROM recordings WHERE kind = 'audio'").unwrap(), Some(1));
+    }
+
+    /// Two sources on separate tracks survive the segment join (M4A keeps both).
+    #[test]
+    fn separate_tracks_survive_the_join() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let Some(mut p) = params(dir.path(), db.clone(), "m4a", 0) else { return };
+        let opts = crate::recording::AudioRecordingOptions {
+            audio: crate::audio::AudioOptions { microphone: Some("m".into()), system: Some("s".into()), separate_tracks: true, mic_volume: 100, system_volume: 100 },
+            format: "m4a".into(),
+            quality: "balanced".into(),
+            countdown: 0,
+            max_minutes: 0,
+        };
+        let mut plan = crate::recording::plan_audio(&opts).unwrap();
+        plan.audio_inputs = strs(&["-re", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-re", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000"]);
+        p.plan = plan;
+        p.input = CaptureInput { args: vec![], width: 0, height: 0, frames: None };
+        let mut h = start(p, Arc::new(Record::default())).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1000));
+        h.send(Command::Pause).unwrap();
+        wait_state(&h, RecState::Paused);
+        h.send(Command::Resume).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1000));
+        h.send(Command::Stop).unwrap();
+        assert!(h.wait(Duration::from_secs(30)));
+        let s = h.snapshot();
+        assert_eq!(s.state, RecState::Completed, "{:?}", s.error);
+        let ff = find_tool("ffprobe", None, &[]).unwrap();
+        let pr = probe::probe(Path::new(&ff.path), Path::new(s.output_path.as_ref().unwrap())).unwrap();
+        assert_eq!(pr.audio_streams, 2);
     }
 }

@@ -2,6 +2,7 @@
 //! the FFmpeg service, system detection, storage accounting and the capture interfaces. Unit
 //! tested without Tauri; platform code sits in `cfg`-gated files.
 
+pub mod audio;
 pub mod capture;
 pub mod database;
 pub mod error;

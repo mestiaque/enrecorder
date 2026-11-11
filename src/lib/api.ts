@@ -1,6 +1,6 @@
 /** Typed wrappers around the Rust commands: one function per command. */
 import { invoke } from "@tauri-apps/api/core";
-import type { AboutInfo, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
+import type { AboutInfo, AudioDevice, AudioRecordingOptions, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
 
 export const api = {
   getSettings: () => invoke<SettingsPayload>("get_settings"),
@@ -17,6 +17,8 @@ export const api = {
   listCaptureSources: () => invoke<SourcesPayload>("list_capture_sources"),
   recordingStatus: () => invoke<RecordingSnapshot | null>("recording_status"),
   startRecording: (options: RecordingOptions) => invoke<RecordingSnapshot>("start_video_recording", { options }),
+  listAudioDevices: () => invoke<AudioDevice[]>("list_audio_devices"),
+  startAudioRecording: (options: AudioRecordingOptions) => invoke<RecordingSnapshot>("start_audio_recording", { options }),
   pauseRecording: () => invoke<void>("pause_recording"),
   resumeRecording: () => invoke<void>("resume_recording"),
   stopRecording: () => invoke<void>("stop_recording"),

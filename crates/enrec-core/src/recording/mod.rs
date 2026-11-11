@@ -33,6 +33,9 @@ pub struct RecordingOptions {
     pub countdown: u32,
     /// Stop automatically after this many minutes (0 = no limit).
     pub max_minutes: u32,
+    /// Microphone and/or system audio (phase 3). Off when absent.
+    #[serde(default)]
+    pub audio: crate::audio::AudioOptions,
 }
 
 /// What a recording needs from FFmpeg besides the capture input.
@@ -43,6 +46,10 @@ pub struct EncodePlan {
     pub pre_input: Vec<String>,
     /// Filters, encoder and its quality settings (no output file).
     pub encode: Vec<String>,
+    /// Audio device inputs, placed after the video input.
+    pub audio_inputs: Vec<String>,
+    /// Audio-only recording (no video input, verified for audio).
+    pub audio_only: bool,
     /// Final container extension.
     pub extension: &'static str,
     pub width: u32,
@@ -186,14 +193,49 @@ pub fn plan(opts: &RecordingOptions, input: &CaptureInput, caps: &Capabilities) 
             enc.extend(["-b:v".into(), format!("{mbps:.0}M")]);
         }
     }
-    // Screen recordings have no audio yet (phase 3).
-    enc.push("-an".into());
     let extension = match opts.format.as_str() {
         "mkv" => "mkv",
         "webm" => "webm",
         _ => "mp4",
     };
-    Ok(EncodePlan { encoder, pre_input, encode: enc, extension, width: w, height: h })
+    // Audio from the same FFmpeg process: one clock, one file per segment.
+    let audio = crate::audio::plan(&opts.audio, 1, crate::audio::codec_for(extension), true);
+    if audio.inputs.is_empty() {
+        enc.push("-an".into());
+    } else {
+        enc.extend(["-map".into(), "0:v".into()]);
+        enc.extend(audio.output);
+    }
+    Ok(EncodePlan { encoder, pre_input, encode: enc, audio_inputs: audio.inputs, audio_only: false, extension, width: w, height: h })
+}
+
+/// Options of the Audio Recorder (no video).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioRecordingOptions {
+    pub audio: crate::audio::AudioOptions,
+    /// "mp3" | "m4a" | "opus" | "flac" | "wav"
+    pub format: String,
+    /// "high" | "balanced" | "small"
+    pub quality: String,
+    pub countdown: u32,
+    pub max_minutes: u32,
+}
+
+/// Encode plan for an audio-only recording. Segments are Matroska (any codec), joined on stop.
+pub fn plan_audio(opts: &AudioRecordingOptions) -> Result<EncodePlan> {
+    if opts.audio.is_empty() {
+        return Err(AppError::InvalidSetting("Choose a microphone or system audio to record".into()));
+    }
+    let (codec, ext) = crate::audio::audio_format(&opts.format, &opts.quality)?;
+    let codec_refs: Vec<&str> = codec.iter().map(|s| s.as_str()).collect();
+    // MP3, WAV, FLAC and Opus files hold one audio stream: two sources are mixed there.
+    let mut a = opts.audio.clone();
+    if ext != "m4a" {
+        a.separate_tracks = false;
+    }
+    let audio = crate::audio::plan(&a, 0, &codec_refs, true);
+    Ok(EncodePlan { encoder: codec[1].clone(), pre_input: vec![], encode: audio.output, audio_inputs: audio.inputs, audio_only: true, extension: ext, width: 0, height: 0 })
 }
 
 /// `dir/stem.ext`, or `dir/stem (2).ext` … when the name is taken.
@@ -233,6 +275,7 @@ mod tests {
             show_cursor: true,
             countdown: 3,
             max_minutes: 0,
+            audio: Default::default(),
         }
     }
 

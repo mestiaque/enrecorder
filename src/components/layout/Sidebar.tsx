@@ -11,7 +11,7 @@ import { Tip } from "../ui/primitives";
 export const PAGES: { id: PageId; label: string; icon: ReactNode; phase?: number; section: "studio" | "library" }[] = [
   { id: "home", label: "Home", icon: <Home className="h-4 w-4" />, section: "studio" },
   { id: "video", label: "Video Recorder", icon: <MonitorPlay className="h-4 w-4" />, section: "studio" },
-  { id: "audio", label: "Audio Recorder", icon: <AudioLines className="h-4 w-4" />, phase: 3, section: "studio" },
+  { id: "audio", label: "Audio Recorder", icon: <AudioLines className="h-4 w-4" />, section: "studio" },
   { id: "screenshot", label: "Screenshot Studio", icon: <Camera className="h-4 w-4" />, phase: 4, section: "studio" },
   { id: "editor", label: "Media Editor", icon: <Scissors className="h-4 w-4" />, phase: 5, section: "studio" },
   { id: "recordings", label: "Recordings", icon: <Clapperboard className="h-4 w-4" />, section: "library" },
@@ -60,9 +60,10 @@ export function Sidebar() {
   const page = useNav((s) => s.page);
   const go = useNav((s) => s.go);
   const recording = useRecording((s) => isActive(s.snap));
+  const audioOnly = useRecording((s) => !!s.snap?.audioOnly);
   const rows = (section: "studio" | "library") =>
     PAGES.filter((p) => p.section === section).map((p) => (
-      <NavRow key={p.id} collapsed={collapsed} icon={p.icon} label={p.label} active={page === p.id} soon={!!p.phase} shortcut={`Ctrl+${PAGES.indexOf(p) + 1}`} live={p.id === "video" && recording} onClick={() => go(p.id)} />
+      <NavRow key={p.id} collapsed={collapsed} icon={p.icon} label={p.label} active={page === p.id} soon={!!p.phase} shortcut={`Ctrl+${PAGES.indexOf(p) + 1}`} live={recording && p.id === (audioOnly ? "audio" : "video")} onClick={() => go(p.id)} />
     ));
   return (
     <aside className={cn("flex shrink-0 flex-col border-r border-line bg-panel transition-[width] duration-200", collapsed ? "w-[52px]" : "w-[220px]")}>

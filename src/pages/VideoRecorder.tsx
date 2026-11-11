@@ -16,7 +16,7 @@ import { useSettings } from "../store/settings";
 const BACKEND_NOTE: Record<string, string> = {
   x11: "ENRecorder captures monitors, windows and areas directly from the X server.",
   wayland: "On Wayland, your desktop asks which screen or window to share each time; ENRecorder never captures without it.",
-  windows: "Windows.Graphics.Capture shows a border around what is being recorded.",
+  windows: "ENRecorder records monitors and areas with Desktop Duplication (sharp at any display scaling) and windows with GDI.",
   unknown: "No graphical session was found, so the screen cannot be captured.",
 };
 
@@ -102,7 +102,7 @@ export function VideoRecorderPage() {
               <div className="min-w-0 text-[12px] text-muted">
                 {blocker ?? (source ? sourceLabel(source) : "")}
                 <div className="text-[11px] text-faint">
-                  <Kbd>Ctrl+Shift+R</Kbd> starts and stops from anywhere · video only for now (audio arrives in phase 3)
+                  <Kbd>Ctrl+Shift+R</Kbd> starts and stops from anywhere · microphone and system audio under Recording settings
                 </div>
               </div>
             </div>

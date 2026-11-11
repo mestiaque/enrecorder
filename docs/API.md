@@ -40,15 +40,22 @@ TypeScript types live in `src/lib/types.ts` and mirror the Rust structs (camelCa
 | `open_region_selector` | — | opens the area overlay on the main window's monitor |
 | `region_selected` | `rect: CaptureSource(region) \| null` | called by the overlay; emits `region-selected` |
 
+| `list_audio_devices` | — | `AudioDevice[]` = `{ id, name, kind: "microphone"\|"system", default }` |
+| `start_audio_recording` | `options: AudioRecordingOptions` | `RecordingSnapshot` (audio only; pause/resume/stop as above) |
+
+`AudioOptions` = `{ microphone?: id, system?: id, separateTracks, micVolume, systemVolume (percent, 0–200) }`;
+`AudioRecordingOptions` = `{ audio: AudioOptions, format ("mp3"|"m4a"|"opus"|"flac"|"wav"), quality, countdown, maxMinutes }`.
+
 `CaptureSource` = `{type:"desktop",width,height}` · `{type:"monitor",id,name,width,height,x,y,primary}` ·
 `{type:"window",id,title,app,width,height}` · `{type:"region",x,y,width,height}` (physical pixels).
 
 `RecordingOptions` = `{ source, fps (24|30|60|120), resolution ("native"|"720"|"1080"|"1440"|"2160"),
 format ("mp4"|"mkv"|"webm"), codec ("h264"|"hevc"|"av1"|"vp9"), encoder ("auto"|name), quality
-("high"|"balanced"|"small"), showCursor, countdown (s), maxMinutes (0 = none) }`.
+("high"|"balanced"|"small"), showCursor, countdown (s), maxMinutes (0 = none), audio?: AudioOptions }`.
 
 `RecordingSnapshot` = `{ sessionId, state, countdownLeft, elapsedMs, segments, frames, dropped, fps,
-sizeBytes, encoder, width, height, source, outputPath?, recordingId?, error?, notice? }`.
+sizeBytes, encoder, width, height, source, outputPath?, recordingId?, error?, notice?, audioLevel? (dBFS),
+audioTracks, audioOnly }`.
 
 ## System
 

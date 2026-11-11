@@ -180,6 +180,8 @@ pub fn run() {
             system::open_log_folder,
             system::quit_app,
             recording::list_capture_sources,
+            recording::list_audio_devices,
+            recording::start_audio_recording,
             recording::recording_status,
             recording::start_video_recording,
             recording::pause_recording,

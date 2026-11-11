@@ -43,17 +43,26 @@ strength of mocked tests alone.
 | Quit while recording asks first, then stops and saves | Done | |
 | X11 window capture limits | Known | covered windows are captured too; a window keeps its starting size |
 | Wayland backend (xdg-desktop-portal ScreenCast → PipeWire via GStreamer `pipewiresrc` → frame pipe → FFmpeg) | Done | tested end to end on headless sway + xdg-desktop-portal-wlr (Docker); **not yet tested on GNOME/KDE Wayland hardware**. Portal cancel = recording cancelled with a message |
-| Frame-stream pipeline: one-frame slot, fixed-rate feeder, still frames repeated, late ticks counted as dropped | Done | shared by Wayland and (next) Windows |
-| Windows backend (Windows.Graphics.Capture) | Planned (phase 2, next) | will plug into the frame-stream pipeline |
+| Frame-stream pipeline: one-frame slot, fixed-rate feeder, still frames repeated, late ticks counted as dropped | Done | used by Wayland |
+| Windows backend: monitors/areas with FFmpeg `ddagrab` (Desktop Duplication, physical pixels at any scaling), windows and multi-monitor desktop with `gdigrab`; monitors from DXGI, windows from EnumWindows | Done | cross-built and clippy-clean; **not yet run on Windows hardware**; window capture records what is visible |
 | Scheduled recording, file splitting | Planned (phase 6) | |
-| Audio in screen recordings | Planned (phase 3) | recordings are video only |
+| Audio in screen recordings: microphone and/or system audio, mixed or on separate tracks, AAC (MP4/MKV) or Opus (WebM), same FFmpeg process and segments as the video (one clock) | Done | |
+
+## Audio (phase 3)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Device list: microphones and system audio (monitors of outputs) via `pactl` (PulseAudio or PipeWire's pipewire-pulse); defaults marked | Done | without `pactl` the server defaults are offered |
+| Windows devices via DirectShow (`ffmpeg -list_devices`); loopback devices (Stereo Mix, virtual cables) offered as system audio | Done | WASAPI loopback without such a device is not available through FFmpeg — known limitation |
+| Audio Recorder page: microphone, system audio or both; MP3, M4A (AAC), Opus, FLAC, WAV; quality; pause/resume; saved in `<recordings>/Audio` and the library | Done | |
+| Mixer: per-source volume, `amix` without normalisation, `aresample=async` drift correction | Done | volume sliders in the UI come with the editor (phase 5) |
+| Multi-track: separate tracks in MP4/MKV/WebM screen recordings and M4A audio; one-track formats (MP3/WAV/FLAC/Opus) mix | Done | the segment join keeps every stream |
+| Live peak meter (0.1 s) in the recorder and the live panel | Done | via FFmpeg `astats` |
 
 ## Planned
 
 | Area | Phase |
 |---|---|
-| Wayland portal + PipeWire and Windows.Graphics.Capture backends | 2 (rest) |
-| Audio: device manager, microphone, system audio (WASAPI loopback / PipeWire), meters, multi-track, mixing | 3 |
 | Screenshots: full screen, monitor, window, region, delay; annotation editor; PNG/JPEG/WebP; clipboard | 4 |
 | Library actions (rename, delete, tags, favourites, preview, metadata via FFprobe, thumbnails); export queue; basic editor | 5 |
 | Webcam overlay, cursor effects, keystroke overlay, audio processing, OCR, optional transcription | 6 |

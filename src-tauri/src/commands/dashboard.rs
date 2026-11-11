@@ -28,7 +28,7 @@ pub async fn dashboard(app: AppHandle) -> Result<Dashboard> {
         let q = |filter: &str| LibraryQuery { filter: filter.into(), sort: "newest".into(), limit: 6, ..Default::default() };
         let mut recent_recordings = state.db.list_media(&q("video"))?;
         recent_recordings.extend(state.db.list_media(&q("audio"))?);
-        recent_recordings.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        recent_recordings.sort_by_key(|r| std::cmp::Reverse(r.created_at));
         recent_recordings.truncate(6);
         Ok(Dashboard {
             stats: state.db.library_stats()?,

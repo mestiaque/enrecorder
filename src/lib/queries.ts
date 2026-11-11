@@ -31,3 +31,6 @@ export const useDashboard = () => useQuery({ queryKey: keys.dashboard, queryFn: 
 export const useMedia = (q: LibraryQuery) => useQuery({ queryKey: keys.media(q), queryFn: () => api.listMedia(q), placeholderData: (prev) => prev });
 export const useExportJobs = () => useQuery({ queryKey: keys.exports, queryFn: api.listExportJobs });
 export const usePaths = () => useQuery({ queryKey: keys.paths, queryFn: api.appPaths });
+
+/** Microphones and system-audio sources; refreshed when the page is shown again. */
+export const useAudioDevices = () => useQuery({ queryKey: ["audio-devices"], queryFn: api.listAudioDevices, staleTime: 10_000 });

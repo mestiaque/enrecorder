@@ -1,7 +1,8 @@
 import { FolderOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import { api, errorMessage } from "../../lib/api";
-import { usePaths, useTools } from "../../lib/queries";
+import { useAudioDevices, usePaths, useTools } from "../../lib/queries";
+import { AudioSourceSelect } from "./AudioSourceSelect";
 import type { Codec, EncoderStatus, Settings } from "../../lib/types";
 import { useSettings } from "../../store/settings";
 import { toast, useUi } from "../../store/ui";
@@ -34,6 +35,7 @@ export function RecordSettings({ backend }: { backend: string | null | undefined
   const { settings: s, set } = useSettings();
   const { data: tools } = useTools();
   const { data: paths } = usePaths();
+  const { data: devices } = useAudioDevices();
   const encoders = tools?.capabilities?.encoders;
   const usable = verifiedFor(encoders, s.recCodec);
   const auto = usable[0];
@@ -89,6 +91,17 @@ export function RecordSettings({ backend }: { backend: string | null | undefined
       <Line label="Quality">
         <Segmented value={s.recQuality} onChange={(v) => void set("recQuality", v)} options={[{ value: "small", label: "Smaller file" }, { value: "balanced", label: "Balanced" }, { value: "high", label: "High" }]} />
       </Line>
+      <Line label="Microphone" hint="Your voice, recorded with the screen">
+        <AudioSourceSelect value={s.recMic} kind="microphone" devices={devices} onChange={(v) => void set("recMic", v)} />
+      </Line>
+      <Line label="System audio" hint={devices && !devices.some((d) => d.kind === "system") ? "No loopback device on this computer" : "Sound playing on this computer"}>
+        <AudioSourceSelect value={s.recSystemAudio} kind="system" devices={devices} onChange={(v) => void set("recSystemAudio", v)} />
+      </Line>
+      {s.recMic && s.recSystemAudio && (
+        <Line label="Separate audio tracks" hint="Keep voice and system sound apart for editing; off mixes them into one track">
+          <Switch checked={s.recSeparateTracks} onChange={(v) => void set("recSeparateTracks", v)} label="Separate audio tracks" />
+        </Line>
+      )}
       <Line label="Show the mouse pointer">
         <Switch checked={s.recCursor} onChange={(v) => void set("recCursor", v)} label="Show the mouse pointer" />
       </Line>
