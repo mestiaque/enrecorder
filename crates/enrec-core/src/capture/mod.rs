@@ -68,6 +68,9 @@ pub struct CaptureInput {
     pub width: u32,
     pub height: u32,
     pub frames: Option<Box<dyn frames::FrameSource>>,
+    /// Top-left of the captured area on the desktop (physical pixels), when known; pointer
+    /// tracks are relative to it. None on Wayland (the portal does not say).
+    pub origin: Option<(i32, i32)>,
 }
 
 impl std::fmt::Debug for CaptureInput {

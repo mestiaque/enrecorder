@@ -68,6 +68,39 @@ pub struct Settings {
     pub audio_system: String,
     pub audio_format: String,
     pub audio_quality: String,
+    /// Microphone noise gate, echo cancellation, input volumes (percent, 0–200).
+    pub rec_mic_gate: bool,
+    pub rec_echo_cancel: bool,
+    pub rec_mic_volume: u32,
+    pub rec_system_volume: u32,
+    /// Audio capture format: 44100 / 48000 / 96000 Hz, 1 or 2 channels.
+    pub audio_sample_rate: u32,
+    pub audio_channels: u32,
+    /// Start a new file every N minutes (0 = one file).
+    pub rec_split_minutes: u32,
+    /// Remember pointer positions and clicks while recording (X11/Windows), so click
+    /// highlights can be added when exporting. Applied afterwards, never during capture.
+    pub rec_track_clicks: bool,
+    /// Remember key presses for a keystroke overlay added when exporting (off by default:
+    /// it records what is typed; X11/Windows only).
+    pub rec_track_keys: bool,
+    // Screenshots
+    /// "png" | "jpeg" | "webp"
+    pub shot_format: String,
+    /// JPEG/WebP quality 50–100.
+    pub shot_quality: u32,
+    /// File name template: {date}, {time}, {mode} are replaced.
+    pub shot_name_template: String,
+    // Performance
+    /// Use GPU encoders when available ("Automatic" picks software when off).
+    pub hw_accel: bool,
+    /// Make thumbnails for the library.
+    pub thumbnails: bool,
+    // Privacy
+    /// Delete log files older than this many days (0 = keep).
+    pub log_retention_days: u32,
+    /// Desktop notification when a recording, screenshot or export is saved.
+    pub notify_on_save: bool,
     // Appearance
     /// "dark" | "light" | "glass" | "system"
     pub theme: String,
@@ -112,6 +145,22 @@ impl Default for Settings {
             audio_system: String::new(),
             audio_format: "mp3".into(),
             audio_quality: "balanced".into(),
+            rec_mic_gate: false,
+            rec_echo_cancel: false,
+            rec_mic_volume: 100,
+            rec_system_volume: 100,
+            audio_sample_rate: 48000,
+            audio_channels: 2,
+            rec_split_minutes: 0,
+            rec_track_clicks: false,
+            rec_track_keys: false,
+            shot_format: "png".into(),
+            shot_quality: 90,
+            shot_name_template: "Screenshot {date} {time}".into(),
+            hw_accel: true,
+            thumbnails: true,
+            log_retention_days: 14,
+            notify_on_save: true,
             theme: "dark".into(),
             accent: "#6366f1".into(),
             animations: true,
@@ -192,6 +241,26 @@ impl Settings {
         if !matches!(self.audio_quality.as_str(), "high" | "balanced" | "small") {
             self.audio_quality = d.audio_quality;
         }
+        self.rec_mic_volume = self.rec_mic_volume.min(200);
+        self.rec_system_volume = self.rec_system_volume.min(200);
+        if !crate::audio::SAMPLE_RATES.contains(&self.audio_sample_rate) {
+            self.audio_sample_rate = d.audio_sample_rate;
+        }
+        if !matches!(self.audio_channels, 1 | 2) {
+            self.audio_channels = d.audio_channels;
+        }
+        if !matches!(self.rec_split_minutes, 0 | 5 | 10 | 15 | 30 | 60) {
+            self.rec_split_minutes = d.rec_split_minutes;
+        }
+        if !matches!(self.shot_format.as_str(), "png" | "jpeg" | "webp") {
+            self.shot_format = d.shot_format.clone();
+        }
+        self.shot_quality = self.shot_quality.clamp(50, 100);
+        let t = self.shot_name_template.trim();
+        if t.is_empty() || t.len() > 120 || t.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')) {
+            self.shot_name_template = d.shot_name_template.clone();
+        }
+        self.log_retention_days = self.log_retention_days.min(365);
         if !matches!(self.language.as_str(), "en") {
             self.language = d.language;
         }
@@ -275,10 +344,16 @@ mod tests {
         m.insert("recFps".to_string(), json!(25));
         m.insert("recEncoder".to_string(), json!("libx264; rm -rf /"));
         m.insert("recMaxMinutes".to_string(), json!(99999));
+        m.insert("audioSampleRate".to_string(), json!(22050));
+        m.insert("shotNameTemplate".to_string(), json!("../../etc/x"));
+        m.insert("recSplitMinutes".to_string(), json!(7));
         let s = Settings::from_map(&m);
         assert_eq!(s.rec_fps, 30);
         assert_eq!(s.rec_encoder, "auto");
         assert_eq!(s.rec_max_minutes, 1440);
+        assert_eq!(s.audio_sample_rate, 48000);
+        assert_eq!(s.shot_name_template, "Screenshot {date} {time}");
+        assert_eq!(s.rec_split_minutes, 0);
         assert_eq!(s.theme, "dark");
         assert_eq!(s.accent, "#6366f1");
         assert!(!s.start_minimized);
@@ -316,5 +391,18 @@ mod tests {
         for k in FOLDER_KEYS {
             assert!(Settings::is_known_key(k));
         }
+    }
+}
+
+/// Expands a screenshot name template: {date} → 2026-11-12, {time} → 10-02-33, {mode} → screen.
+pub fn expand_template(template: &str, date: &str, time: &str, mode: &str) -> String {
+    template.replace("{date}", date).replace("{time}", time).replace("{mode}", mode)
+}
+
+#[cfg(test)]
+mod template_tests {
+    #[test]
+    fn expands() {
+        assert_eq!(super::expand_template("Shot {date} {time} {mode}", "2026-11-12", "10-00-00", "area"), "Shot 2026-11-12 10-00-00 area");
     }
 }

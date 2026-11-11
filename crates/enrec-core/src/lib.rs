@@ -12,6 +12,7 @@ pub mod recording;
 pub mod screenshot;
 pub mod settings;
 pub mod storage;
+pub mod track;
 pub mod system;
 pub mod webcam;
 

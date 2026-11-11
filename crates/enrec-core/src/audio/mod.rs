@@ -50,13 +50,50 @@ pub struct AudioOptions {
     pub mic_denoise: bool,
     /// Microphone: even out loud and quiet speech (real-time dynamic normalisation).
     pub mic_normalize: bool,
+    /// Microphone noise gate: silence the input between words (keyboard, breathing).
+    pub mic_gate: bool,
+    /// Echo cancellation (Linux): record the microphone through PipeWire/PulseAudio's WebRTC
+    /// echo canceller, so speaker sound picked up by the microphone is removed.
+    pub echo_cancel: bool,
+    /// Capture sample rate in Hz: 44100, 48000 or 96000 (0 = 48000).
+    pub sample_rate: u32,
+    /// Capture channels: 1 (mono) or 2 (stereo) (0 = stereo).
+    pub channels: u32,
 }
 
-/// Filters in front of the microphone: high-pass + FFT denoiser, then dynamic normalisation.
+pub const SAMPLE_RATES: &[u32] = &[44100, 48000, 96000];
+
+impl AudioOptions {
+    pub fn rate(&self) -> u32 {
+        if SAMPLE_RATES.contains(&self.sample_rate) {
+            self.sample_rate
+        } else {
+            48000
+        }
+    }
+
+    pub fn channel_count(&self) -> u32 {
+        if self.channels == 1 {
+            1
+        } else {
+            2
+        }
+    }
+}
+
+/// Filters in front of the microphone: high-pass + FFT denoiser, noise gate, then dynamic
+/// normalisation (the gate runs before normalisation so it does not lift the room noise).
 pub fn mic_chain(denoise: bool, normalize: bool) -> String {
+    mic_chain_with(denoise, false, normalize)
+}
+
+pub fn mic_chain_with(denoise: bool, gate: bool, normalize: bool) -> String {
     let mut f = Vec::new();
     if denoise {
         f.push("highpass=f=80,afftdn=nr=12:nf=-30:tn=1");
+    }
+    if gate {
+        f.push("agate=threshold=0.015:ratio=6:attack=5:release=250:range=0.05");
     }
     if normalize {
         f.push("dynaudnorm=f=150:g=15:p=0.9");
@@ -145,12 +182,30 @@ fn s(v: &str) -> String {
     v.to_string()
 }
 
-/// FFmpeg input arguments for one device.
+/// FFmpeg input arguments for one device (48 kHz stereo).
 pub fn input_args(device: &str) -> Vec<String> {
+    input_args_with(device, 48000, 2)
+}
+
+/// FFmpeg input arguments for one device at a sample rate and channel count.
+pub fn input_args_with(device: &str, rate: u32, channels: u32) -> Vec<String> {
     if cfg!(windows) {
-        vec![s("-thread_queue_size"), s("1024"), s("-f"), s("dshow"), s("-audio_buffer_size"), s("50"), s("-i"), format!("audio={device}")]
+        vec![
+            s("-thread_queue_size"),
+            s("1024"),
+            s("-f"),
+            s("dshow"),
+            s("-audio_buffer_size"),
+            s("50"),
+            s("-sample_rate"),
+            rate.to_string(),
+            s("-channels"),
+            channels.to_string(),
+            s("-i"),
+            format!("audio={device}"),
+        ]
     } else {
-        vec![s("-thread_queue_size"), s("1024"), s("-f"), s("pulse"), s("-sample_rate"), s("48000"), s("-channels"), s("2"), s("-fragment_size"), s("4096"), s("-i"), device.to_string()]
+        vec![s("-thread_queue_size"), s("1024"), s("-f"), s("pulse"), s("-sample_rate"), rate.to_string(), s("-channels"), channels.to_string(), s("-fragment_size"), s("4096"), s("-i"), device.to_string()]
     }
 }
 
@@ -170,7 +225,7 @@ pub struct AudioPlan {
 
 pub fn plan(opts: &AudioOptions, first_index: usize, codec_args: &[&str], meter: bool) -> AudioPlan {
     let mut sources: Vec<(&str, u32)> = Vec::new();
-    let mic_extra = mic_chain(opts.mic_denoise, opts.mic_normalize);
+    let mic_extra = mic_chain_with(opts.mic_denoise, opts.mic_gate, opts.mic_normalize);
     let mic_extra = if mic_extra.is_empty() { String::new() } else { format!(",{mic_extra}") };
     let has_mic = opts.microphone.is_some();
     if let Some(m) = &opts.microphone {
@@ -184,11 +239,11 @@ pub fn plan(opts: &AudioOptions, first_index: usize, codec_args: &[&str], meter:
     }
     let mut p = AudioPlan::default();
     for (dev, _) in &sources {
-        p.inputs.extend(input_args(dev));
+        p.inputs.extend(input_args_with(dev, opts.rate(), opts.channel_count()));
     }
     // Level meter: a peak value every 0.1 s, printed through FFmpeg's log (at "info": a file
     // or pipe output would be buffered and arrive only at the end). The session parses it.
-    let meter_f = if meter { ",asetnsamples=n=4800:p=0,astats=metadata=1:reset=1,ametadata=mode=print:key=lavfi.astats.Overall.Peak_level".to_string() } else { String::new() };
+    let meter_f = if meter { ",asetnsamples=n=4800:p=0,astats=metadata=1:reset=1,ametadata=mode=print:key=lavfi.astats.Overall.Peak_level,ametadata=mode=print:key=lavfi.astats.Overall.RMS_level".to_string() } else { String::new() };
     let mut graph = Vec::new();
     if sources.len() == 2 && !opts.separate_tracks {
         let (a, b) = (first_index, first_index + 1);
@@ -222,7 +277,7 @@ pub fn codec_for(container: &str) -> &'static [&'static str] {
 
 // ------------------------------------------------------------------ audio-only recordings
 
-pub const AUDIO_FORMATS: &[&str] = &["mp3", "m4a", "opus", "flac", "wav"];
+pub const AUDIO_FORMATS: &[&str] = &["mp3", "m4a", "opus", "ogg", "flac", "wav"];
 
 /// Codec arguments for an audio-only file, and its container name for the segment-join.
 pub fn audio_format(format: &str, quality: &str) -> Result<(Vec<String>, &'static str)> {
@@ -231,6 +286,7 @@ pub fn audio_format(format: &str, quality: &str) -> Result<(Vec<String>, &'stati
         "mp3" => vec![s("-c:a"), s("libmp3lame"), s("-b:a"), kbps(256, 192, 128)],
         "m4a" => vec![s("-c:a"), s("aac"), s("-b:a"), kbps(256, 160, 96)],
         "opus" => vec![s("-c:a"), s("libopus"), s("-b:a"), kbps(160, 112, 64)],
+        "ogg" => vec![s("-c:a"), s("libvorbis"), s("-q:a"), s(match quality { "high" => "7", "small" => "3", _ => "5" })],
         "flac" => vec![s("-c:a"), s("flac")],
         "wav" => vec![s("-c:a"), s("pcm_s16le")],
         other => return Err(AppError::InvalidSetting(format!("unknown audio format {other}"))),
@@ -239,6 +295,7 @@ pub fn audio_format(format: &str, quality: &str) -> Result<(Vec<String>, &'stati
         "mp3" => "mp3",
         "m4a" => "m4a",
         "opus" => "opus",
+        "ogg" => "ogg",
         "flac" => "flac",
         _ => "wav",
     };
@@ -247,11 +304,68 @@ pub fn audio_format(format: &str, quality: &str) -> Result<(Vec<String>, &'stati
 
 /// A peak level printed by the meter ("lavfi.astats.Overall.Peak_level=-12.3"), in dBFS.
 pub fn parse_level(line: &str) -> Option<f64> {
-    let v = line.split_once("lavfi.astats.Overall.Peak_level=")?.1.trim();
+    parse_db(line, "lavfi.astats.Overall.Peak_level=")
+}
+
+/// The RMS (average loudness) level printed by the meter, in dBFS.
+pub fn parse_rms(line: &str) -> Option<f64> {
+    parse_db(line, "lavfi.astats.Overall.RMS_level=")
+}
+
+fn parse_db(line: &str, key: &str) -> Option<f64> {
+    let v = line.split_once(key)?.1.trim();
     if v.starts_with("-inf") {
         return Some(-120.0);
     }
     v.parse::<f64>().ok().map(|db| db.clamp(-120.0, 0.0))
+}
+
+/// A peak at or above this level means the signal was cut off (clipping).
+pub const CLIP_DB: f64 = -0.1;
+
+// ------------------------------------------------------------------ echo cancellation
+
+/// A WebRTC echo canceller loaded into PipeWire/PulseAudio for one recording; unloaded when
+/// dropped, so the user's audio setup is left as it was.
+pub struct EchoCancel {
+    module: String,
+    /// The cleaned microphone source to record from.
+    pub source: String,
+}
+
+/// `pactl load-module module-echo-cancel` arguments for a microphone.
+pub fn echo_cancel_args(mic: &str, name: &str) -> Vec<String> {
+    let mut v = vec![s("load-module"), s("module-echo-cancel"), s("aec_method=webrtc"), format!("source_name={name}"), format!("sink_name={name}_sink")];
+    if mic != "default" && !mic.starts_with('@') {
+        v.push(format!("source_master={mic}"));
+    }
+    v
+}
+
+impl EchoCancel {
+    pub fn load(mic: &str) -> Result<Self> {
+        if cfg!(windows) {
+            return Err(AppError::Unsupported("echo cancellation is only available on Linux".into()));
+        }
+        let name = format!("enrecorder_ec_{}", std::process::id());
+        let out = command(Path::new("pactl"))
+            .args(echo_cancel_args(mic, &name))
+            .output()
+            .map_err(|e| AppError::Unsupported(format!("pactl is not available for echo cancellation: {e}")))?;
+        if !out.status.success() {
+            return Err(AppError::Unsupported(format!("the echo canceller could not be loaded: {}", String::from_utf8_lossy(&out.stderr).trim())));
+        }
+        let module = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        log::info!("echo cancellation on (module {module}, source {name})");
+        Ok(Self { module, source: name })
+    }
+}
+
+impl Drop for EchoCancel {
+    fn drop(&mut self) {
+        let _ = command(Path::new("pactl")).args(["unload-module", &self.module]).output();
+        log::info!("echo cancellation off (module {})", self.module);
+    }
 }
 
 #[cfg(test)]
@@ -285,7 +399,7 @@ mod tests {
 
     #[test]
     fn plans() {
-        let both = AudioOptions { microphone: Some("mic".into()), system: Some("mon".into()), separate_tracks: false, mic_volume: 100, system_volume: 80, mic_denoise: true, mic_normalize: false };
+        let both = AudioOptions { microphone: Some("mic".into()), system: Some("mon".into()), separate_tracks: false, mic_volume: 100, system_volume: 80, mic_denoise: true, mic_normalize: false, ..Default::default() };
         let p = plan(&both, 1, codec_for("mp4"), false);
         assert_eq!(p.tracks, 1);
         let fc = &p.output[p.output.iter().position(|a| a == "-filter_complex").unwrap() + 1];
@@ -301,7 +415,30 @@ mod tests {
     }
 
     #[test]
+    fn gate_rate_and_channels() {
+        let o = AudioOptions { microphone: Some("mic".into()), mic_gate: true, mic_normalize: true, sample_rate: 44100, channels: 1, ..Default::default() };
+        let p = plan(&o, 0, &["-c:a", "flac"], true);
+        assert!(p.inputs.windows(2).any(|w| w == ["-sample_rate", "44100"]) && p.inputs.windows(2).any(|w| w == ["-channels", "1"]));
+        let fc = &p.output[1];
+        assert!(fc.find("agate").unwrap() < fc.find("dynaudnorm").unwrap(), "{fc}");
+        assert!(fc.contains("RMS_level") && fc.contains("Peak_level"));
+        // Unsupported values fall back to 48 kHz stereo.
+        let o = AudioOptions { sample_rate: 22050, channels: 6, ..Default::default() };
+        assert_eq!((o.rate(), o.channel_count()), (48000, 2));
+    }
+
+    #[test]
+    fn echo_cancel_command() {
+        let a = echo_cancel_args("alsa_input.usb", "ec1");
+        assert_eq!(a[..2], ["load-module".to_string(), "module-echo-cancel".into()]);
+        assert!(a.contains(&"source_master=alsa_input.usb".to_string()) && a.contains(&"source_name=ec1".to_string()));
+        // The default microphone needs no master.
+        assert!(!echo_cancel_args("default", "ec1").iter().any(|x| x.starts_with("source_master")));
+    }
+
+    #[test]
     fn levels() {
+        assert_eq!(parse_rms("[Parsed_ametadata_7 @ 0x1] lavfi.astats.Overall.RMS_level=-30.25"), Some(-30.25));
         assert_eq!(parse_level("lavfi.astats.Overall.Peak_level=-12.5"), Some(-12.5));
         assert_eq!(parse_level("lavfi.astats.Overall.Peak_level=-inf"), Some(-120.0));
         assert_eq!(parse_level("frame:3 pts:1"), None);
@@ -311,6 +448,7 @@ mod tests {
     fn formats() {
         assert_eq!(audio_format("mp3", "high").unwrap().0[3], "256k");
         assert_eq!(audio_format("flac", "balanced").unwrap().1, "flac");
-        assert!(audio_format("ogg", "high").is_err());
+        assert_eq!(audio_format("ogg", "high").unwrap().1, "ogg");
+        assert!(audio_format("aiff", "high").is_err());
     }
 }

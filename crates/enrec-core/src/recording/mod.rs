@@ -40,6 +40,22 @@ pub struct RecordingOptions {
     /// Camera picture in a corner (phase 6). Off when absent.
     #[serde(default)]
     pub webcam: crate::webcam::WebcamOptions,
+    /// File splitting, software-only encoding, pointer/key tracks.
+    #[serde(default)]
+    pub extras: RecordingExtras,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RecordingExtras {
+    /// Start a new file every N minutes (0 = one file). Each file is complete and playable.
+    pub split_minutes: u32,
+    /// "Automatic" encoder choice uses software encoders only (hardware acceleration off).
+    pub software_only: bool,
+    /// Save pointer positions and clicks next to the recording (for click highlights on export).
+    pub track_clicks: bool,
+    /// Save key presses next to the recording (for a keystroke overlay on export).
+    pub track_keys: bool,
 }
 
 /// What a recording needs from FFmpeg besides the capture input.
@@ -76,6 +92,11 @@ fn codec_allowed(format: &str, codec: Codec) -> bool {
 /// The encoder to use: the requested one if it is verified for this codec, or with "auto"
 /// the first verified one in preference order (hardware before software).
 pub fn choose_encoder(caps: &Capabilities, codec: Codec, requested: &str) -> Result<String> {
+    choose_encoder_with(caps, codec, requested, true)
+}
+
+/// Like [`choose_encoder`]; `allow_hw = false` makes "auto" pick software encoders only.
+pub fn choose_encoder_with(caps: &Capabilities, codec: Codec, requested: &str, allow_hw: bool) -> Result<String> {
     let verified = |name: &str| caps.encoders.iter().any(|e| e.name == name && e.verified && e.codec == codec);
     if requested != "auto" {
         return if verified(requested) {
@@ -86,7 +107,7 @@ pub fn choose_encoder(caps: &Capabilities, codec: Codec, requested: &str) -> Res
     }
     CANDIDATES
         .iter()
-        .filter(|c| c.codec == codec)
+        .filter(|c| c.codec == codec && (allow_hw || c.vendor == Vendor::Software))
         .find(|c| verified(c.name))
         .map(|c| c.name.to_string())
         .ok_or_else(|| AppError::Unsupported(format!("No verified {} encoder on this computer", codec_name(codec))))
@@ -133,7 +154,7 @@ pub fn plan(opts: &RecordingOptions, input: &CaptureInput, caps: &Capabilities) 
     if !matches!(opts.fps, 24 | 30 | 60 | 120) {
         return Err(AppError::InvalidSetting(format!("{} fps is not offered", opts.fps)));
     }
-    let encoder = choose_encoder(caps, opts.codec, &opts.encoder)?;
+    let encoder = choose_encoder_with(caps, opts.codec, &opts.encoder, !opts.extras.software_only)?;
     let vendor = CANDIDATES.iter().find(|c| c.name == encoder).map(|c| c.vendor).unwrap_or(Vendor::Software);
     let (w, h) = output_size(input.width, input.height, &opts.resolution);
     let q = opts.quality.as_str();
@@ -253,7 +274,9 @@ pub fn plan_audio(opts: &AudioRecordingOptions) -> Result<EncodePlan> {
     if ext != "m4a" {
         a.separate_tracks = false;
     }
-    let audio = crate::audio::plan(&a, 0, &codec_refs, true);
+    let mut audio = crate::audio::plan(&a, 0, &codec_refs, true);
+    // The file keeps the capture rate and channel layout (the filters must not change them).
+    audio.output.extend(["-ar".to_string(), a.rate().to_string(), "-ac".to_string(), a.channel_count().to_string()]);
     Ok(EncodePlan { encoder: codec[1].clone(), pre_input: vec![], encode: audio.output, video_inputs: vec![], audio_inputs: audio.inputs, audio_only: true, extension: ext, width: 0, height: 0 })
 }
 
@@ -296,11 +319,12 @@ mod tests {
             max_minutes: 0,
             audio: Default::default(),
             webcam: Default::default(),
+            extras: Default::default(),
         }
     }
 
     fn input(w: u32, h: u32) -> CaptureInput {
-        CaptureInput { args: vec![], width: w, height: h, frames: None }
+        CaptureInput { args: vec![], width: w, height: h, frames: None, origin: None }
     }
 
     #[test]
@@ -311,6 +335,8 @@ mod tests {
         // A named encoder must be verified for that codec.
         assert!(choose_encoder(&caps(&["libx264"]), Codec::H264, "h264_nvenc").is_err());
         assert!(choose_encoder(&caps(&["libx265"]), Codec::H264, "libx265").is_err());
+        // Hardware acceleration off: "auto" skips the GPU encoder.
+        assert_eq!(choose_encoder_with(&caps(&["libx264", "h264_vaapi"]), Codec::H264, "auto", false).unwrap(), "libx264");
     }
 
     #[test]

@@ -174,7 +174,7 @@ mod tests {
         let ff = PathBuf::from(ff.path);
         let dir = tempfile::tempdir().unwrap();
         // A synthetic source stands in for the screen.
-        let input = CaptureInput { args: ["-f", "lavfi", "-i", "testsrc2=size=320x240:rate=1"].iter().map(|s| s.to_string()).collect(), width: 320, height: 240, frames: None };
+        let input = CaptureInput { args: ["-f", "lavfi", "-i", "testsrc2=size=320x240:rate=1"].iter().map(|s| s.to_string()).collect(), width: 320, height: 240, frames: None, origin: None };
         let orig = originals_dir(dir.path()).join("a.png");
         assert_eq!(grab(&ff, &input, &orig).unwrap(), (320, 240));
         let png = std::fs::read(&orig).unwrap();

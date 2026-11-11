@@ -74,7 +74,7 @@ fn capture(app: &AppHandle, source: Option<CaptureSource>, cursor: bool, out: &P
                 Some(_) => bytes,
                 None => {
                     let ffmpeg = state.tools.read().ffmpeg.clone().ok_or(AppError::FfmpegMissing)?;
-                    let input = enrec_core::capture::CaptureInput { args: vec!["-i".into(), file.to_string_lossy().into_owned()], width: 0, height: 0, frames: None };
+                    let input = enrec_core::capture::CaptureInput { args: vec!["-i".into(), file.to_string_lossy().into_owned()], width: 0, height: 0, frames: None, origin: None };
                     screenshot::grab(Path::new(&ffmpeg.path), &input, out)?;
                     std::fs::read(out)?
                 }

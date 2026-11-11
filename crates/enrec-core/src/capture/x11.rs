@@ -106,6 +106,15 @@ impl X11Backend {
         Ok(Snapshot { root_w, root_h, monitors, windows })
     }
 
+    /// Where a window's top-left corner is on the screen.
+    fn window_origin(&self, id: &str) -> Option<(i32, i32)> {
+        let w: u32 = id.parse().ok()?;
+        let (c, screen) = self.connect().ok()?;
+        let root = c.setup().roots[screen].root;
+        let r = c.translate_coordinates(w, root, 0, 0).ok()?.reply().ok()?;
+        Some((r.dst_x as i32, r.dst_y as i32))
+    }
+
     fn grab_args(&self, fps: u32, cursor: bool) -> Vec<String> {
         vec!["-f".into(), "x11grab".into(), "-framerate".into(), fps.to_string(), "-draw_mouse".into(), if cursor { "1" } else { "0" }.into()]
     }
@@ -121,7 +130,7 @@ impl X11Backend {
         }
         let mut args = self.grab_args(req.fps, req.show_cursor);
         args.extend(["-video_size".into(), format!("{w}x{h}"), "-i".into(), format!("{}+{x},{y}", self.display)]);
-        Ok(CaptureInput { args, width: w, height: h, frames: None })
+        Ok(CaptureInput { args, width: w, height: h, frames: None, origin: Some((x as i32, y as i32)) })
     }
 }
 
@@ -165,7 +174,7 @@ impl CaptureBackend for X11Backend {
                 let (w, h) = found.ok_or_else(|| AppError::NotFound("the window was closed".into()))?;
                 let mut args = self.grab_args(req.fps, req.show_cursor);
                 args.extend(["-window_id".into(), id.clone(), "-i".into(), self.display.clone()]);
-                Ok(CaptureInput { args, width: w, height: h, frames: None })
+                Ok(CaptureInput { args, width: w, height: h, frames: None, origin: self.window_origin(id) })
             }
         }
     }

@@ -26,12 +26,12 @@ fn main() {
         let caps = check_capabilities(&ff).unwrap();
         let backend = X11Backend::new().unwrap();
         let source = backend.list_sources().unwrap()[0].clone();
-        let options = RecordingOptions { source: source.clone(), fps: 30, resolution: "native".into(), format: "mp4".into(), codec: Codec::H264, encoder, quality: "balanced".into(), show_cursor: true, countdown: 0, max_minutes: 0, audio: Default::default(), webcam: Default::default() };
+        let options = RecordingOptions { source: source.clone(), fps: 30, resolution: "native".into(), format: "mp4".into(), codec: Codec::H264, encoder, quality: "balanced".into(), show_cursor: true, countdown: 0, max_minutes: 0, audio: Default::default(), webcam: Default::default(), extras: Default::default() };
         let input = backend.input(&CaptureRequest { source, fps: 30, show_cursor: true }).unwrap();
         let plan = plan(&options, &input, &caps).unwrap();
         println!("encoder: {}", plan.encoder);
         let db = Arc::new(Db::open_in_memory().unwrap());
-        let mut h = session::start(session::StartParams { db, ffmpeg: ff.path.into(), ffprobe: probe, input, plan, options, output_dir: out, file_stem: "x11 test".into(), min_free_bytes: 0 }, Arc::new(Print)).unwrap();
+        let mut h = session::start(session::StartParams { db, ffmpeg: ff.path.into(), ffprobe: probe, input, plan, options, output_dir: out, file_stem: "x11 test".into(), min_free_bytes: 0, keep_alive: Vec::new(), tracking: None }, Arc::new(Print)).unwrap();
         std::thread::sleep(Duration::from_secs(3));
         h.send(session::Command::Pause).unwrap();
         std::thread::sleep(Duration::from_secs(1));

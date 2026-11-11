@@ -152,14 +152,15 @@ fn s(v: impl ToString) -> String {
 }
 
 /// `ddagrab` input: one output, optionally a part of it (offsets are relative to the output).
-fn ddagrab(req: &CaptureRequest, idx: u32, x: i32, y: i32, w: u32, h: u32, full: bool) -> CaptureInput {
+#[allow(clippy::too_many_arguments)]
+fn ddagrab(req: &CaptureRequest, idx: u32, x: i32, y: i32, w: u32, h: u32, full: bool, origin: (i32, i32)) -> CaptureInput {
     let mut f = format!("ddagrab=output_idx={idx}:framerate={}:draw_mouse={}", req.fps, if req.show_cursor { 1 } else { 0 });
     if !full {
         f.push_str(&format!(":offset_x={x}:offset_y={y}:video_size={w}x{h}"));
     }
     // Frames arrive in GPU memory; the encoder plan expects ordinary frames.
     f.push_str(",hwdownload,format=bgra");
-    CaptureInput { args: vec![s("-thread_queue_size"), s("512"), s("-f"), s("lavfi"), s("-i"), f], width: w, height: h, frames: None }
+    CaptureInput { args: vec![s("-thread_queue_size"), s("512"), s("-f"), s("lavfi"), s("-i"), f], width: w, height: h, frames: None, origin: Some(origin) }
 }
 
 fn gdigrab(req: &CaptureRequest, target: &str, area: Option<(i32, i32, u32, u32)>) -> Vec<String> {
@@ -196,33 +197,33 @@ impl CaptureBackend for WindowsBackend {
             CaptureSource::Desktop { .. } => {
                 if has_ddagrab() && outs.len() == 1 {
                     let r = outs[0].rect;
-                    return Ok(ddagrab(req, outs[0].idx, 0, 0, even((r.right - r.left) as u32), even((r.bottom - r.top) as u32), true));
+                    return Ok(ddagrab(req, outs[0].idx, 0, 0, even((r.right - r.left) as u32), even((r.bottom - r.top) as u32), true, (r.left, r.top)));
                 }
                 let vs = virtual_screen();
-                Ok(CaptureInput { args: gdigrab(req, "desktop", None), width: (vs.right - vs.left) as u32, height: (vs.bottom - vs.top) as u32, frames: None })
+                Ok(CaptureInput { args: gdigrab(req, "desktop", None), width: (vs.right - vs.left) as u32, height: (vs.bottom - vs.top) as u32, frames: None, origin: Some((vs.left, vs.top)) })
             }
             CaptureSource::Monitor { id, .. } => {
                 let o = outs.iter().find(|o| o.idx.to_string() == *id).ok_or_else(|| AppError::Other("That monitor is no longer connected".into()))?;
                 let (w, h) = (even((o.rect.right - o.rect.left) as u32), even((o.rect.bottom - o.rect.top) as u32));
                 if has_ddagrab() {
-                    return Ok(ddagrab(req, o.idx, 0, 0, w, h, true));
+                    return Ok(ddagrab(req, o.idx, 0, 0, w, h, true, (o.rect.left, o.rect.top)));
                 }
-                Ok(CaptureInput { args: gdigrab(req, "desktop", Some((o.rect.left, o.rect.top, w, h))), width: w, height: h, frames: None })
+                Ok(CaptureInput { args: gdigrab(req, "desktop", Some((o.rect.left, o.rect.top, w, h))), width: w, height: h, frames: None, origin: Some((o.rect.left, o.rect.top)) })
             }
             CaptureSource::Region { x, y, width, height } => {
                 let (w, h) = (even(*width), even(*height));
                 if has_ddagrab() {
                     // ddagrab captures one output: the area must lie on a single monitor.
                     if let Some(o) = outs.iter().find(|o| *x >= o.rect.left && *y >= o.rect.top && x + w as i32 <= o.rect.right && y + h as i32 <= o.rect.bottom) {
-                        return Ok(ddagrab(req, o.idx, x - o.rect.left, y - o.rect.top, w, h, false));
+                        return Ok(ddagrab(req, o.idx, x - o.rect.left, y - o.rect.top, w, h, false, (*x, *y)));
                     }
                 }
-                Ok(CaptureInput { args: gdigrab(req, "desktop", Some((*x, *y, w, h))), width: w, height: h, frames: None })
+                Ok(CaptureInput { args: gdigrab(req, "desktop", Some((*x, *y, w, h))), width: w, height: h, frames: None, origin: Some((*x, *y)) })
             }
             CaptureSource::Window { id, .. } => {
                 let w = windows_list().into_iter().find(|w| format!("{:#x}", w.hwnd) == *id).ok_or_else(|| AppError::Other("That window was closed".into()))?;
                 let (ww, wh) = (even((w.rect.right - w.rect.left) as u32), even((w.rect.bottom - w.rect.top) as u32));
-                Ok(CaptureInput { args: gdigrab(req, &format!("title={}", w.title), None), width: ww, height: wh, frames: None })
+                Ok(CaptureInput { args: gdigrab(req, &format!("title={}", w.title), None), width: ww, height: wh, frames: None, origin: Some((w.rect.left, w.rect.top)) })
             }
             CaptureSource::Portal => Err(AppError::Unsupported("the sharing dialog is only used on Wayland".into())),
         }

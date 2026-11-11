@@ -233,6 +233,7 @@ impl CaptureBackend for WaylandBackend {
             args: vec![],
             width: even(w),
             height: even(h),
+            origin: None,
             frames: Some(Box::new(WaylandFrames { share, fd: Some(granted.fd), node_id: granted.node_id, width: even(w), height: even(h), child: None, reader: None })),
         })
     }

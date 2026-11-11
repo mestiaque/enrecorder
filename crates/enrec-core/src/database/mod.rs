@@ -42,6 +42,8 @@ pub struct MediaItem {
     pub status: String,
     pub favorite: bool,
     pub created_at: i64,
+    /// Tag names (filled by `list_media`).
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
@@ -107,6 +109,16 @@ pub struct LibraryQuery {
     /// "newest" | "oldest" | "name" | "size" | "duration"
     pub sort: String,
     pub limit: u32,
+    /// "" | "today" | "week" | "month"
+    pub date: String,
+    /// "" | "short" (< 1 min) | "medium" (1–10 min) | "long" (> 10 min)
+    pub length: String,
+    /// "" | "small" (< 50 MB) | "medium" (50–500 MB) | "large" (> 500 MB)
+    pub size: String,
+    /// "" | "uhd" (≥ 2160) | "fhd" (≥ 1080) | "hd" (≥ 720) | "sd" (< 720)
+    pub resolution: String,
+    /// A tag id ("" = any).
+    pub tag: String,
 }
 
 impl Db {
@@ -240,6 +252,40 @@ impl Db {
             _ => "WHERE 1",
         };
         let limit = if q.limit == 0 { 500 } else { q.limit.min(5000) };
+        // Fixed clauses only; the one user value (the tag id) is a bound parameter.
+        let day = 24 * 3600 * 1000;
+        let since = match q.date.as_str() {
+            "today" => Some(now_ms() - now_ms().rem_euclid(day)),
+            "week" => Some(now_ms() - 7 * day),
+            "month" => Some(now_ms() - 30 * day),
+            _ => None,
+        };
+        let mut extra = String::new();
+        if let Some(t) = since {
+            extra.push_str(&format!(" AND created_at >= {t}"));
+        }
+        extra.push_str(match q.length.as_str() {
+            "short" => " AND duration_ms < 60000",
+            "medium" => " AND duration_ms BETWEEN 60000 AND 600000",
+            "long" => " AND duration_ms > 600000",
+            _ => "",
+        });
+        extra.push_str(match q.size.as_str() {
+            "small" => " AND size_bytes < 52428800",
+            "medium" => " AND size_bytes BETWEEN 52428800 AND 524288000",
+            "large" => " AND size_bytes > 524288000",
+            _ => "",
+        });
+        extra.push_str(match q.resolution.as_str() {
+            "uhd" => " AND height >= 2160",
+            "fhd" => " AND height >= 1080",
+            "hd" => " AND height >= 720",
+            "sd" => " AND height < 720",
+            _ => "",
+        });
+        if !q.tag.is_empty() {
+            extra.push_str(" AND EXISTS(SELECT 1 FROM media_tags mt WHERE mt.tag_id = ?3 AND (mt.recording_id = m.id OR mt.screenshot_id = m.id))");
+        }
         let sql = format!(
             "SELECT * FROM (
                 SELECT r.id, r.kind, r.title, r.path, r.size_bytes, r.duration_ms, r.width, r.height, r.status,
@@ -249,13 +295,15 @@ impl Db {
                 SELECT s.id, 'screenshot', s.title, s.path, s.size_bytes, NULL, s.width, s.height, s.status,
                        EXISTS(SELECT 1 FROM favorites f WHERE f.screenshot_id = s.id), s.created_at
                 FROM screenshots s
-             ) {kind_filter} AND (?1 = '' OR title LIKE '%' || ?1 || '%' ESCAPE '\\')
+             ) AS m {kind_filter} AND (?1 = '' OR title LIKE '%' || ?1 || '%' ESCAPE '\\') {extra}
              ORDER BY {order} LIMIT ?2"
         );
         let search = escape_like(q.search.trim());
         let c = self.conn.lock();
         let mut st = c.prepare(&sql)?;
-        let rows = st.query_map(params![search, limit], |r| {
+        let tag = q.tag.clone();
+        let bind: Vec<&dyn rusqlite::ToSql> = if tag.is_empty() { vec![&search, &limit] } else { vec![&search, &limit, &tag] };
+        let rows = st.query_map(bind.as_slice(), |r| {
             Ok(MediaItem {
                 id: r.get(0)?,
                 kind: r.get(1)?,
@@ -268,9 +316,24 @@ impl Db {
                 status: r.get(8)?,
                 favorite: r.get(9)?,
                 created_at: r.get(10)?,
+                tags: Vec::new(),
             })
         })?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(AppError::from)
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(AppError::from)?;
+        drop(st);
+        // Tags of the listed items in one query.
+        let mut tags: HashMap<String, Vec<String>> = HashMap::new();
+        let mut st = c.prepare("SELECT COALESCE(mt.recording_id, mt.screenshot_id), t.name FROM media_tags mt JOIN tags t ON t.id = mt.tag_id ORDER BY t.name COLLATE NOCASE")?;
+        for row in st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+            let (id, name) = row?;
+            tags.entry(id).or_default().push(name);
+        }
+        for it in &mut items {
+            if let Some(t) = tags.remove(&it.id) {
+                it.tags = t;
+            }
+        }
+        Ok(items)
     }
 
     pub fn list_export_jobs(&self, limit: u32) -> Result<Vec<ExportJobRow>> {
@@ -476,7 +539,7 @@ mod tests {
 
         let all = d.list_media(&LibraryQuery::default()).unwrap();
         assert_eq!(all.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["r1", "s1", "r2"]);
-        let q = |filter: &str, search: &str, sort: &str| d.list_media(&LibraryQuery { filter: filter.into(), search: search.into(), sort: sort.into(), limit: 0 }).unwrap();
+        let q = |filter: &str, search: &str, sort: &str| d.list_media(&LibraryQuery { filter: filter.into(), search: search.into(), sort: sort.into(), limit: 0, ..Default::default() }).unwrap();
         assert_eq!(q("audio", "", "").len(), 1);
         assert_eq!(q("screenshot", "", "")[0].kind, "screenshot");
         assert_eq!(q("favorites", "", "")[0].id, "r2");

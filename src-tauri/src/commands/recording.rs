@@ -50,6 +50,15 @@ pub fn recording_status(state: tauri::State<AppState>) -> Option<Snapshot> {
     state.recorder.lock().as_ref().map(|h| h.snapshot())
 }
 
+/// Echo cancellation: loads the WebRTC echo canceller for the chosen microphone and records
+/// from its cleaned source instead. The canceller is unloaded when the session ends.
+fn echo_cancel(audio: &mut enrec_core::audio::AudioOptions) -> Result<Vec<Box<dyn std::any::Any + Send>>> {
+    let Some(mic) = audio.microphone.clone().filter(|_| audio.echo_cancel) else { return Ok(Vec::new()) };
+    let ec = enrec_core::audio::EchoCancel::load(&mic)?;
+    audio.microphone = Some(ec.source.clone());
+    Ok(vec![Box::new(ec)])
+}
+
 /// The file name for a new recording: "Recording 2026-11-11 10-02-33".
 fn file_stem() -> String {
     let now = tauri_plugin_log::TimezoneStrategy::UseLocal.get_now();
@@ -58,7 +67,7 @@ fn file_stem() -> String {
 }
 
 #[tauri::command]
-pub async fn start_video_recording(app: AppHandle, options: RecordingOptions) -> Result<Snapshot> {
+pub async fn start_video_recording(app: AppHandle, mut options: RecordingOptions) -> Result<Snapshot> {
     blocking(move || {
         let state = app.state::<AppState>();
         if state.recording_active() {
@@ -70,6 +79,7 @@ pub async fn start_video_recording(app: AppHandle, options: RecordingOptions) ->
         let caps = tools.capabilities.ok_or_else(|| AppError::Other("The encoders are still being tested; try again in a few seconds".into()))?;
         let output_dir = state.recordings_folder();
         check_output_folder(&output_dir.to_string_lossy())?;
+        let keep_alive = echo_cancel(&mut options.audio)?;
         let input = backend.input(&CaptureRequest { source: options.source.clone(), fps: options.fps, show_cursor: options.show_cursor })?;
         let plan = plan(&options, &input, &caps)?;
         let observer = Arc::new(UiObserver { app: app.clone(), last_progress: Mutex::new(Instant::now() - Duration::from_secs(1)) });
@@ -84,6 +94,8 @@ pub async fn start_video_recording(app: AppHandle, options: RecordingOptions) ->
                 output_dir,
                 file_stem: file_stem(),
                 min_free_bytes: MIN_FREE,
+                keep_alive,
+                tracking,
             },
             observer,
         )?;
@@ -122,7 +134,7 @@ fn audio_stem() -> String {
 /// Audio Recorder: microphone and/or system audio to MP3/M4A/Opus/FLAC/WAV, same session
 /// engine as video (segments on pause, verified file, library row).
 #[tauri::command]
-pub async fn start_audio_recording(app: AppHandle, options: enrec_core::recording::AudioRecordingOptions) -> Result<Snapshot> {
+pub async fn start_audio_recording(app: AppHandle, mut options: enrec_core::recording::AudioRecordingOptions) -> Result<Snapshot> {
     blocking(move || {
         let state = app.state::<AppState>();
         if state.recording_active() {
@@ -132,6 +144,7 @@ pub async fn start_audio_recording(app: AppHandle, options: enrec_core::recordin
         let ffmpeg = tools.ffmpeg.ok_or(AppError::FfmpegMissing)?;
         let output_dir = state.audio_folder();
         check_output_folder(&output_dir.to_string_lossy())?;
+        let keep_alive = echo_cancel(&mut options.audio)?;
         let plan = enrec_core::recording::plan_audio(&options)?;
         // The session needs video-shaped options for its timing fields; the source is unused.
         let rec_opts = RecordingOptions {
@@ -147,6 +160,7 @@ pub async fn start_audio_recording(app: AppHandle, options: enrec_core::recordin
             max_minutes: options.max_minutes,
             audio: options.audio.clone(),
             webcam: Default::default(),
+            extras: Default::default(),
         };
         let observer = Arc::new(UiObserver { app: app.clone(), last_progress: Mutex::new(Instant::now() - Duration::from_secs(1)) });
         let handle = session::start(
@@ -154,12 +168,14 @@ pub async fn start_audio_recording(app: AppHandle, options: enrec_core::recordin
                 db: state.db.clone(),
                 ffmpeg: PathBuf::from(&ffmpeg.path),
                 ffprobe: tools.ffprobe.map(|t| PathBuf::from(t.path)),
-                input: enrec_core::capture::CaptureInput { args: vec![], width: 0, height: 0, frames: None },
+                input: enrec_core::capture::CaptureInput { args: vec![], width: 0, height: 0, frames: None, origin: None },
                 plan,
                 options: rec_opts,
                 output_dir,
                 file_stem: audio_stem(),
                 min_free_bytes: MIN_FREE,
+                keep_alive,
+                tracking,
             },
             observer,
         )?;
