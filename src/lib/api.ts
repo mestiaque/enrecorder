@@ -1,6 +1,6 @@
 /** Typed wrappers around the Rust commands: one function per command. */
 import { invoke } from "@tauri-apps/api/core";
-import type { AboutInfo, AudioDevice, Camera, AudioRecordingOptions, ExportPreset, MediaDetail, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
+import type { AboutInfo, AudioDevice, Camera, Interrupted, AudioRecordingOptions, ExportPreset, MediaDetail, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
 
 export const api = {
   getSettings: () => invoke<SettingsPayload>("get_settings"),
@@ -19,6 +19,12 @@ export const api = {
   startRecording: (options: RecordingOptions) => invoke<RecordingSnapshot>("start_video_recording", { options }),
   listAudioDevices: () => invoke<AudioDevice[]>("list_audio_devices"),
   listCameras: () => invoke<Camera[]>("list_cameras"),
+  checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
+  installUpdate: (info: UpdateInfo) => invoke<"restart" | "exiting">("install_update", { info }),
+  restartApp: () => invoke<void>("restart_app"),
+  listInterrupted: () => invoke<Interrupted[]>("list_interrupted"),
+  recoverRecording: (sessionId: string) => invoke<string>("recover_recording", { sessionId }),
+  discardRecording: (sessionId: string) => invoke<void>("discard_recording", { sessionId }),
   ocrStatus: () => invoke<{ available: boolean; languages: string[] }>("ocr_status"),
   copyText: (text: string) => invoke<void>("copy_text", { text }),
   ocrScreenshot: (png: string, languages: string) => invoke<string>("ocr_screenshot", { png, languages }),
@@ -57,6 +63,17 @@ export const api = {
 };
 
 /** Event names emitted by the backend. */
+export interface UpdateInfo {
+  version: string;
+  notes: string;
+  page: string;
+  assetName: string;
+  url: string;
+  size: number;
+  sha256: string;
+  installable: boolean;
+}
+
 export const EVENTS = {
   toolsChanged: "tools-changed",
   recordingState: "recording-state",

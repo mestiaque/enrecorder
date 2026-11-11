@@ -76,6 +76,17 @@ audioTracks, audioOnly }`.
 `ExportPreset` = `{ kind: "convert"|"compress"|"audio"|"gif"|"trim", format, quality, startMs?, endMs?,
 maxHeight?, removeAudio?, volume?, denoise?, normalize? }`. Event `export-progress`: `{ id, status, progress, error?, outputPath }`.
 
+## Recovery and updates
+
+| Command | Arguments | Returns |
+|---|---|---|
+| `list_interrupted` | — | `Interrupted[]` = `{ sessionId, kind, startedAt, folder, parts, sizeBytes }` |
+| `recover_recording` | `sessionId` | id of the new library item "<title> (recovered).mkv" |
+| `discard_recording` | `sessionId` | — (parts deleted) |
+| `check_update` | — | `UpdateInfo \| null` (null = up to date) = `{ version, notes, page, assetName, url, size, sha256, installable }` |
+| `install_update` | `info: UpdateInfo` | message (download, SHA-256 check, install; refused while recording) |
+| `restart_app` | — | — |
+
 ## Screenshots
 
 | Command | Arguments | Returns |

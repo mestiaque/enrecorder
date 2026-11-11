@@ -229,3 +229,32 @@ PipeWire, then Windows.Graphics.Capture), FFmpeg recording pipeline, recording H
 
 **Not built (documented):** cursor effects and keystroke overlay (global input hooks: not
 available on Wayland and privacy-sensitive), transcription (needs a local speech model).
+
+## Phase 7 — Production (2026-11-11)
+
+**Implemented**
+* `recording::recovery`: finds sessions marked interrupted at start-up that still have parts,
+  remuxes each part with corrupt data dropped (`-err_detect ignore_err -fflags
+  +genpts+discardcorrupt`), skips unreadable parts, joins the rest into "<title> (recovered).mkv"
+  and adds it to the library; discard deletes the parts; sessions without parts are closed.
+  Home shows a recovery banner.
+* In-app updates (same flow as ENSave/ENStream): GitHub latest release, SHA-256 from the API
+  digest, .deb via pkexec apt, AppImage swap, silent NSIS; refused while recording; "Check for
+  updates" setting and Settings → Updates row.
+* Installers: `tauri.windows.conf.json` bundles FFmpeg/FFprobe (+ licence) next to the exe;
+  `scripts/release/fetch-ffmpeg-windows.sh` downloads the BtbN build and checks it against
+  `checksums.sha256`. AppImage target on Linux.
+* CI (`.github/workflows/build.yml`): typecheck, vitest, build, core tests with FFmpeg, clippy,
+  app tests on every push; on a `v*` tag .deb + AppImage (ubuntu-22.04) and NSIS (windows-latest),
+  then a GitHub release.
+* Security review ([SECURITY.md](SECURITY.md)); `open_path` now opens folders and media files
+  only.
+
+**Tests executed**
+* `cargo test -p enrec-core`: 73 passed — new: a recording killed mid-way is found and recovered.
+* `cargo test -p enrecorder`: update asset selection, `open_path` filter.
+* clippy `-D warnings` for the workspace (Linux, all targets) and cross-checked for
+  `x86_64-pc-windows-gnu`; `pnpm typecheck`, `pnpm test` (14): clean.
+
+**Not verified here:** the Windows installer and the bundled FFmpeg run only on Windows (CI
+builds them); no GitHub access from this environment to dry-run the FFmpeg download.

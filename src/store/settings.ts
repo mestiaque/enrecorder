@@ -26,6 +26,8 @@ export const DEFAULT_SETTINGS: Settings = {
   recMic: "",
   recSystemAudio: "",
   recSeparateTracks: false,
+  checkUpdates: true,
+  lastUpdateCheck: 0,
   recMicDenoise: false,
   recMicNormalize: false,
   recWebcam: "",

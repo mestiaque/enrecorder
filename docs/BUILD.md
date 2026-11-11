@@ -51,17 +51,24 @@ Headless UI tests (Docker): `scripts/test/smoke-ui.sh`, `scripts/test/smoke-reco
 
 ### Runtime dependencies
 
-`ffmpeg` (declared in the .deb). WebKitGTK 4.1 and GTK 3 come with Ubuntu 22.04+.
+`ffmpeg` (declared in the .deb; the AppImage uses the system one). WebKitGTK 4.1 and GTK 3 come with Ubuntu 22.04+.
 
 ## Windows (10 / 11)
 
-Not built in this environment yet. On Windows with Rust (MSVC), Node.js 20+ and the WebView2
-runtime:
+Built by CI (`.github/workflows/build.yml`, `windows-latest`). Locally, with Rust (MSVC),
+Node.js 20+, Git Bash and the WebView2 runtime:
 
 ```powershell
+bash scripts/release/fetch-ffmpeg-windows.sh   # FFmpeg + FFprobe into src-tauri\ffmpeg-bin (SHA-256 checked)
 npx -y pnpm@9.15.0 install
-npx -y pnpm@9.15.0 tauri build            # NSIS installer in target\release\bundle\nsis
+npx -y pnpm@9.15.0 tauri build --bundles nsis  # target\release\bundle\nsis\ENRecorder_<ver>_x64-setup.exe
 ```
 
-FFmpeg must currently be installed separately (on PATH) or chosen in Settings → Tools; shipping a
-licensed FFmpeg build next to the program is planned for phase 7.
+`src-tauri/tauri.windows.conf.json` puts `ffmpeg.exe`, `ffprobe.exe` and `FFMPEG-LICENSE.txt`
+next to `enrecorder.exe`, where ENRecorder looks first (then PATH, then Settings → Tools).
+
+## Releases
+
+CI runs the tests on every push. A tag `v<version>` (matching `tauri.conf.json`) also builds the
+.deb, the AppImage and the Windows installer and publishes them as a GitHub release; the in-app
+updater picks them up by name (`ENRecorder_<ver>_amd64.deb`, `_amd64.AppImage`, `_x64-setup.exe`).

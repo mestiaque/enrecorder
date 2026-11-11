@@ -1,0 +1,132 @@
+# Tests ENRecorder and builds the installers (.deb, AppImage, Windows setup with FFmpeg bundled).
+# Pushing a tag like v0.3.0 publishes a release; the in-app updater reads those assets.
+name: build
+
+on:
+  push:
+    tags: ["v*"]
+    branches: [master, main]
+    paths-ignore: ["docs/**", "**.md"]
+  pull_request:
+    paths-ignore: ["docs/**", "**.md"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  # Absolute: Tauri runs cargo inside src-tauri, so a relative path would land there.
+  CARGO_TARGET_DIR: ${{ github.workspace }}/target
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@v4
+      - name: System dependencies
+        run: |
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30"
+          for i in 1 2 3; do
+            timeout 300 sudo apt-get $APT update &&
+            timeout 900 sudo -E apt-get $APT install -y pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+              libayatana-appindicator3-dev libssl-dev libxdo-dev ffmpeg && exit 0
+            echo "apt attempt $i failed, retrying…"; sleep 15
+          done
+          exit 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Core tests (real FFmpeg)
+        run: cargo test -p enrec-core
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test -p enrecorder
+
+  bundle:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            bundles: deb,appimage
+          - os: windows-latest
+            bundles: nsis
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          APT="-o Acquire::Retries=3 -o Acquire::http::Timeout=30"
+          for i in 1 2 3; do
+            timeout 300 sudo apt-get $APT update &&
+            timeout 900 sudo -E apt-get $APT install -y pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+              libayatana-appindicator3-dev libssl-dev libxdo-dev file patchelf && exit 0
+            echo "apt attempt $i failed, retrying…"; sleep 15
+          done
+          exit 1
+      - name: FFmpeg for the Windows installer
+        if: runner.os == 'Windows'
+        run: ./scripts/release/fetch-ffmpeg-windows.sh
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build --bundles ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/nsis/*-setup.exe
+
+  release:
+    name: Publish release
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    needs: bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Collect files
+        run: |
+          mkdir -p files
+          find out -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*-setup.exe' \) -exec cp {} files/ \;
+          ls -l files
+          test "$(ls files | wc -l)" -ge 3
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: files/*
+          generate_release_notes: true

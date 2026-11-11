@@ -1,3 +1,5 @@
+import { UpdateDialog } from "./components/update/UpdateDialog";
+import { scheduleUpdateCheck } from "./store/update";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
@@ -94,6 +96,8 @@ export default function App() {
   const snap = useRecording((s) => s.snap);
   useTheme();
   useKeys();
+  const checkUpdates = useSettings((s) => s.settings.checkUpdates);
+  useEffect(() => (ready ? scheduleUpdateCheck(checkUpdates) : undefined), [ready, checkUpdates]);
 
   useEffect(() => {
     void useSettings.getState().load().then(() => setReady(true));
@@ -143,6 +147,7 @@ export default function App() {
         <ConfirmHost />
         <PromptHost />
         <Toaster />
+        <UpdateDialog />
       </Tooltip.Provider>
     </QueryClientProvider>
   );

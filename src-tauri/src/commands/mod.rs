@@ -8,6 +8,7 @@ pub mod recording;
 pub mod screenshot;
 pub mod settings;
 pub mod system;
+pub mod update;
 
 pub(crate) fn tauri_err(e: impl std::fmt::Display) -> enrec_core::AppError {
     enrec_core::AppError::Other(e.to_string())

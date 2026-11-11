@@ -363,3 +363,52 @@ pub fn region_selected(app: AppHandle, rect: Option<CaptureSource>) -> Result<()
     crate::tray::show_main(&app);
     Ok(())
 }
+
+// ------------------------------------------------------------------ recovery (phase 7)
+
+fn recovery_folders(state: &AppState) -> Vec<PathBuf> {
+    vec![state.recordings_folder(), state.audio_folder()]
+}
+
+/// Recordings a crash or power cut interrupted, whose parts can still be saved.
+#[tauri::command]
+pub async fn list_interrupted(app: AppHandle) -> Result<Vec<enrec_core::recording::recovery::Interrupted>> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        enrec_core::recording::recovery::find(&state.db, &recovery_folders(&state))
+    })
+    .await
+}
+
+fn find_interrupted(state: &AppState, id: &str) -> Result<enrec_core::recording::recovery::Interrupted> {
+    enrec_core::recording::recovery::find(&state.db, &recovery_folders(state))?
+        .into_iter()
+        .find(|i| i.session_id == id)
+        .ok_or_else(|| AppError::NotFound("that interrupted recording is gone".into()))
+}
+
+#[tauri::command]
+pub async fn recover_recording(app: AppHandle, session_id: String) -> Result<String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let item = find_interrupted(&state, &session_id)?;
+        let tools = state.tools.read().clone();
+        let ffmpeg = tools.ffmpeg.ok_or(AppError::FfmpegMissing)?;
+        let ffprobe = tools.ffprobe.map(|t| PathBuf::from(t.path));
+        let base = if item.kind == "audio" { "Audio" } else { "Recording" };
+        let when = time::OffsetDateTime::from_unix_timestamp(item.started_at / 1000).ok().and_then(|t| t.format(&time::macros::format_description!("[year]-[month]-[day] [hour]-[minute]-[second]")).ok()).unwrap_or_default();
+        let (path, _) = enrec_core::recording::recovery::recover(&state.db, std::path::Path::new(&ffmpeg.path), ffprobe.as_deref(), &item, &format!("{base} {when}"))?;
+        Ok(path.to_string_lossy().into_owned())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn discard_recording(app: AppHandle, session_id: String) -> Result<()> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let item = find_interrupted(&state, &session_id)?;
+        enrec_core::recording::recovery::discard(&state.db, &item)
+    })
+    .await
+}

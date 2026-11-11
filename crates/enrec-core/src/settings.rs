@@ -51,6 +51,10 @@ pub struct Settings {
     pub rec_system_audio: String,
     /// Microphone and system audio on separate tracks instead of one mix.
     pub rec_separate_tracks: bool,
+    /// Look for a new release on GitHub once a day (phase 7).
+    pub check_updates: bool,
+    /// Unix ms of the last automatic check.
+    pub last_update_check: i64,
     /// Microphone clean-up in recordings (phase 6).
     pub rec_mic_denoise: bool,
     pub rec_mic_normalize: bool,
@@ -96,6 +100,8 @@ impl Default for Settings {
             rec_mic: String::new(),
             rec_system_audio: String::new(),
             rec_separate_tracks: false,
+            check_updates: true,
+            last_update_check: 0,
             rec_mic_denoise: false,
             rec_mic_normalize: false,
             rec_webcam: String::new(),

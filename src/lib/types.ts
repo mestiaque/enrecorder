@@ -22,6 +22,8 @@ export interface Settings {
   recMic: string;
   recSystemAudio: string;
   recSeparateTracks: boolean;
+  checkUpdates: boolean;
+  lastUpdateCheck: number;
   recMicDenoise: boolean;
   recMicNormalize: boolean;
   recWebcam: string;
@@ -315,4 +317,13 @@ export interface ExportUpdate {
   progress: number;
   error: string | null;
   outputPath: string;
+}
+
+export interface Interrupted {
+  sessionId: string;
+  kind: "video" | "audio";
+  startedAt: number;
+  folder: string | null;
+  parts: number;
+  sizeBytes: number;
 }

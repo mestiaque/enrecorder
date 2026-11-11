@@ -3,7 +3,7 @@ mod state;
 mod media_server;
 mod tray;
 
-use commands::{dashboard, library, media, recording, screenshot, settings, system};
+use commands::{dashboard, library, media, recording, screenshot, settings, system, update};
 use enrec_core::database::Db;
 use enrec_core::settings::Settings;
 use parking_lot::RwLock;
@@ -214,6 +214,12 @@ pub fn run() {
             screenshot::ocr_screenshot,
             screenshot::copy_text,
             recording::list_cameras,
+            update::check_update,
+            update::install_update,
+            update::restart_app,
+            recording::list_interrupted,
+            recording::recover_recording,
+            recording::discard_recording,
             library::get_media,
             library::media_url,
             library::rename_media,

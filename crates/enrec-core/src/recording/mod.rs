@@ -5,6 +5,7 @@
 //! readable when the app or the computer dies mid-recording, so nothing is lost; on stop the
 //! segments are joined without re-encoding into the chosen container (MP4, MKV or WebM).
 
+pub mod recovery;
 pub mod session;
 
 use crate::capture::{CaptureInput, CaptureSource};

@@ -128,7 +128,23 @@ pub fn diagnostics(app: AppHandle, state: State<AppState>) -> Result<String> {
 
 #[tauri::command]
 pub fn open_path(app: AppHandle, path: String) -> Result<()> {
+    if !openable(std::path::Path::new(&path)) {
+        return Err(AppError::Other(format!("refusing to open {path}: only folders and media files are opened")));
+    }
     app.opener().open_path(path, None::<&str>).map_err(tauri_err)
+}
+
+/// Folders and media files only: the default app for anything else could be a program
+/// (an .exe, a .desktop file, a script), which the window must never be able to start.
+fn openable(p: &std::path::Path) -> bool {
+    const MEDIA: &[&str] = &["mp4", "mkv", "webm", "mov", "avi", "gif", "mp3", "m4a", "aac", "ogg", "opus", "wav", "flac", "png", "jpg", "jpeg", "webp"];
+    if !p.is_absolute() {
+        return false;
+    }
+    if p.is_dir() {
+        return true;
+    }
+    p.is_file() && p.extension().and_then(|e| e.to_str()).is_some_and(|e| MEDIA.contains(&e.to_ascii_lowercase().as_str()))
 }
 
 /// Opens a save folder, creating it first (it may not exist before the first capture).
@@ -199,5 +215,27 @@ pub fn about_info() -> AboutInfo {
         webview_version: tauri::webview_version().unwrap_or_default(),
         platform: std::env::consts::OS.into(),
         arch: std::env::consts::ARCH.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::openable;
+
+    #[test]
+    fn only_folders_and_media_are_opened() {
+        let dir = std::env::temp_dir().join(format!("enrec-open-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["a.MP4", "b.png", "c.sh", "d.desktop", "e.exe", "noext"] {
+            std::fs::write(dir.join(name), b"x").unwrap();
+        }
+        assert!(openable(&dir));
+        assert!(openable(&dir.join("a.MP4")));
+        assert!(openable(&dir.join("b.png")));
+        for bad in ["c.sh", "d.desktop", "e.exe", "noext", "missing.mp4"] {
+            assert!(!openable(&dir.join(bad)), "{bad}");
+        }
+        assert!(!openable(std::path::Path::new("relative.mp4")));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

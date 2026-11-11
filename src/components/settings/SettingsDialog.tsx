@@ -1,3 +1,5 @@
+import { getVersion } from "@tauri-apps/api/app";
+import { useUpdate } from "../../store/update";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, FolderOpen, RefreshCw } from "lucide-react";
@@ -94,6 +96,23 @@ function Toggle({ k, label, hint }: { k: BoolKey; label: string; hint?: string }
 
 const ACCENTS = ["#6366f1", "#3b82f6", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#06b6d4"];
 
+function UpdateRow() {
+  const check = useUpdate((u) => u.check);
+  const checking = useUpdate((u) => u.checking);
+  const [status, setStatus] = useState("");
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    getVersion().then(setVersion, () => {});
+  }, []);
+  return (
+    <Field label="Updates" hint={status || `You have version ${version}`}>
+      <Button size="sm" disabled={checking} onClick={async () => setStatus(await check(true))}>
+        {checking ? "Checking…" : "Check now"}
+      </Button>
+    </Field>
+  );
+}
+
 function GeneralSection() {
   const apply = useSettings((s) => s.apply);
   return (
@@ -101,6 +120,8 @@ function GeneralSection() {
       <Toggle k="startWithOs" label="Start with the system" hint="ENRecorder starts in the tray when you log in" />
       <Toggle k="startMinimized" label="Start minimized to the tray" />
       <Toggle k="closeToTray" label="Keep running in the tray when the window is closed" hint="Quit from the tray menu or More → Quit" />
+      <Toggle k="checkUpdates" label="Check for updates automatically" hint="Looks for a new ENRecorder release on GitHub once a day" />
+      <UpdateRow />
       <Field label="Reset all settings" hint="Your recordings and screenshots are not touched">
         <Button
           size="sm"

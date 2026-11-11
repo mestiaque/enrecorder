@@ -8,3 +8,4 @@ release/
 .vscode/
 .pnpm-store/
 src-tauri/binaries/
+src-tauri/ffmpeg-bin/

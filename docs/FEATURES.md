@@ -90,10 +90,18 @@ strength of mocked tests alone.
 | OCR: "Text" in the screenshot editor reads the current image (crop applied, blurred parts unreadable) with Tesseract, copy to the clipboard | Done | needs `tesseract-ocr` (Ubuntu) or the UB Mannheim build (Windows); English and Bengali used when installed |
 | Cursor effects, keystroke overlay, transcription | Not built | see Planned |
 
+## Production (phase 7)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Recovery of interrupted recordings: Home lists sessions whose parts were left by a crash or power loss; **Recover** remuxes every readable part (corrupt tails dropped) and joins them into "<title> (recovered).mkv" in the library; **Discard** deletes the parts | Done | tested with a recording killed mid-way |
+| In-app updates from GitHub releases: check (at most daily, can be turned off), SHA-256 verified download, install in place (.deb via pkexec, AppImage swap, silent NSIS), restart | Done | refuses while recording |
+| Installers: Ubuntu .deb and AppImage, Windows NSIS (current user) with FFmpeg + FFprobe bundled | Done | built by CI on a `v*` tag |
+| Security review: argument-array processes, CSP, minimal capabilities, asset scope limited to ENRecorder's folders, loopback preview server with token, `open_path` limited to folders and media | Done | [SECURITY.md](SECURITY.md) |
+
 ## Planned
 
-| Area | Phase |
+| Area | Notes |
 |---|---|
-| Cursor effects (click highlights), keystroke overlay | later — need a global input hook (not allowed on Wayland, privacy-sensitive) |
-| Transcription | later — needs a local speech model (whisper.cpp) |
-| Recovery (MKV finalisation), performance, security review, installers (Windows NSIS/portable, AppImage), FFmpeg bundling for Windows | 7 |
+| Cursor effects (click highlights), keystroke overlay | need a global input hook (not allowed on Wayland, privacy-sensitive) |
+| Transcription | needs a local speech model (whisper.cpp) |

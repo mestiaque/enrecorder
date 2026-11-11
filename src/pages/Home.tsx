@@ -1,6 +1,7 @@
 import { AudioLines, Camera, Clapperboard, FolderOpen, HardDrive, Image as ImageIcon, MonitorPlay, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { EmptyState, PageHeader, Panel, StatusIcon } from "../components/ui/blocks";
+import { RecoveryBanner } from "../components/recording/RecoveryBanner";
 import { MediaRow } from "../components/media/MediaList";
 import { Button, IconButton, ProgressBar } from "../components/ui/primitives";
 import { api, errorMessage } from "../lib/api";
@@ -50,6 +51,7 @@ export function HomePage() {
   return (
     <>
       <PageHeader title="Home" subtitle="Record your screen and audio, take screenshots, then trim and export them." />
+      <RecoveryBanner />
 
       <div className="grid gap-3 md:grid-cols-3">
         <QuickAction page="video" icon={<MonitorPlay className="h-5 w-5" />} title="Record the screen" text="The desktop, a monitor, a window or an area. Ctrl+Shift+R starts and stops." />
