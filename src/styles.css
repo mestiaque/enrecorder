@@ -170,3 +170,11 @@ input[type="number"]::-webkit-inner-spin-button {
   width: 100%;
   opacity: 0.35;
 }
+
+/* HUD and area selector windows are transparent. */
+html.overlay,
+html.overlay body,
+html.overlay #root {
+  background: transparent !important;
+  background-image: none !important;
+}

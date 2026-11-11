@@ -2,7 +2,7 @@ mod commands;
 mod state;
 mod tray;
 
-use commands::{dashboard, library, media, settings, system};
+use commands::{dashboard, library, media, recording, settings, system};
 use enrec_core::database::Db;
 use enrec_core::settings::Settings;
 use parking_lot::RwLock;
@@ -10,11 +10,28 @@ use state::{AppState, MediaTools};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Manager, WindowEvent};
 
-/// Quit for real (tray → Quit, menu → Quit): lets the window close instead of hiding it.
+/// Quit for real: a running recording is stopped and saved first (off the main thread, so the
+/// window keeps drawing), then the app exits.
 pub fn quit(app: &tauri::AppHandle) {
     app.state::<AppState>().quitting.store(true, Ordering::SeqCst);
     log::info!("quitting");
-    app.exit(0);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        commands::recording::stop_and_wait(&app, std::time::Duration::from_secs(90));
+        app.exit(0);
+    });
+}
+
+/// The capture backend for the display server of this session.
+fn capture_backend(sys: &enrec_core::system::SystemInfo) -> Result<std::sync::Arc<dyn enrec_core::capture::CaptureBackend>, String> {
+    use enrec_core::system::DisplayServer;
+    match sys.display_server {
+        #[cfg(target_os = "linux")]
+        DisplayServer::X11 => enrec_core::capture::x11::X11Backend::new().map(|b| std::sync::Arc::new(b) as _).map_err(|e| e.to_string()),
+        DisplayServer::Wayland => Err("Recording on Wayland (portal + PipeWire) is still being built. Until then, choose \"Ubuntu on Xorg\" on the login screen to record.".into()),
+        DisplayServer::Windows => Err("Recording on Windows (Windows.Graphics.Capture) is still being built.".into()),
+        _ => Err("No graphical session was found, so the screen cannot be recorded.".into()),
+    }
 }
 
 fn build_state(app: &tauri::AppHandle) -> Result<AppState, Box<dyn std::error::Error>> {
@@ -29,10 +46,17 @@ fn build_state(app: &tauri::AppHandle) -> Result<AppState, Box<dyn std::error::E
         log::warn!("{interrupted} recording session(s) were interrupted last time; their files are kept");
     }
     let settings = Settings::from_map(&db.settings_map()?);
+    let system = enrec_core::system::detect();
+    let capture = capture_backend(&system);
+    if let Err(why) = &capture {
+        log::warn!("screen capture unavailable: {why}");
+    }
     Ok(AppState {
         db: std::sync::Arc::new(db),
         settings: RwLock::new(settings),
-        system: RwLock::new(enrec_core::system::detect()),
+        system: RwLock::new(system),
+        capture,
+        recorder: parking_lot::Mutex::new(None),
         tools: RwLock::new(MediaTools::default()),
         quitting: AtomicBool::new(false),
         data_dir,
@@ -40,6 +64,16 @@ fn build_state(app: &tauri::AppHandle) -> Result<AppState, Box<dyn std::error::E
         system_videos,
         system_pictures,
     })
+}
+
+/// Ctrl+Shift+R start/stop, Ctrl+Shift+P pause/resume (work while the window is hidden).
+fn register_shortcuts(app: &tauri::AppHandle) {
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+    for (code, what) in [(Code::KeyR, "start/stop"), (Code::KeyP, "pause/resume")] {
+        if let Err(e) = app.global_shortcut().register(Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), code)) {
+            log::warn!("shortcut for {what} is not available (another app may use it): {e}");
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -68,6 +102,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    log::info!("global shortcut {shortcut:?}");
+                    if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyR) {
+                        recording::toggle_record(app);
+                    } else if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyP) {
+                        recording::toggle_pause(app);
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             let state = build_state(app.handle())?;
             let hidden = std::env::args().any(|a| a == "--minimized") || state.settings.read().start_minimized;
@@ -76,6 +126,7 @@ pub fn run() {
             app.manage(state);
             media::refresh_tools(app.handle().clone(), false);
             tray::install(app.handle())?;
+            register_shortcuts(app.handle());
             tray::fit_to_monitor(app.handle());
             if !hidden {
                 tray::show_main(app.handle());
@@ -83,12 +134,25 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle();
                 let state = app.state::<AppState>();
-                if !state.quitting.load(Ordering::SeqCst) && state.settings.read().close_to_tray {
+                if state.quitting.load(Ordering::SeqCst) {
+                    return;
+                }
+                if state.settings.read().close_to_tray {
+                    // Recording (if any) continues; the tray shows it.
                     api.prevent_close();
                     let _ = window.hide();
+                } else if state.recording_active() {
+                    api.prevent_close();
+                    tray::request_quit(app);
+                } else {
+                    api.prevent_close();
+                    quit(app);
                 }
             }
         })
@@ -113,6 +177,14 @@ pub fn run() {
             system::open_url,
             system::open_log_folder,
             system::quit_app,
+            recording::list_capture_sources,
+            recording::recording_status,
+            recording::start_video_recording,
+            recording::pause_recording,
+            recording::resume_recording,
+            recording::stop_recording,
+            recording::open_region_selector,
+            recording::region_selected,
             system::hide_to_tray,
         ])
         .build(tauri::generate_context!());

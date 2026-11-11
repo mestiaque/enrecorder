@@ -10,7 +10,7 @@ The image has Rust, Node 20, pnpm, WebKitGTK 4.1 headers, FFmpeg and Xvfb for he
 docker build -t endl-build scripts/docker          # once
 npx -y pnpm@9.15.0 install                         # frontend packages (host or container)
 scripts/docker/run.sh "pnpm tauri build --bundles deb"
-# → target/release/bundle/deb/ENRecorder_0.1.0_amd64.deb
+# → target/release/bundle/deb/ENRecorder_0.2.0_amd64.deb
 scripts/docker/run.sh "scripts/test/smoke-ui.sh"    # headless UI test with screenshots in target/smoke
 ```
 
@@ -36,7 +36,18 @@ npx -y pnpm@9.15.0 typecheck             # strict TypeScript
 npx -y pnpm@9.15.0 test                  # Vitest: readiness, formatting, navigation store
 ```
 
-The FFmpeg test (`real_ffmpeg_if_installed`) runs real test encodes when FFmpeg is installed.
+The FFmpeg and session tests run real encodes when FFmpeg is installed; the X11 test uses the
+real X server when `DISPLAY` is set.
+
+Hardware checks on a real X11 desktop (records the screen for 6 s into the given folder):
+
+```bash
+cargo run -p enrec-core --example x11_sources
+cargo run -p enrec-core --example record_desktop -- /tmp/rec [encoder]
+```
+
+Headless UI tests (Docker): `scripts/test/smoke-ui.sh`, `scripts/test/smoke-record.sh`,
+`scripts/test/smoke-region.sh` (screenshots in `target/smoke*`).
 
 ### Runtime dependencies
 

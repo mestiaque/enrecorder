@@ -7,17 +7,18 @@ export queue. Local-first: no account, no cloud upload, no watermark, no telemet
 ENRecorder is part of the EN* family (ENViewer, ENPlayer, ENSave, ENStream, ENiShare, ENPost)
 and uses the same look, themes (Dark, Light, Glass, System) and settings layout.
 
-> **Status: phase 1 of 7 (foundation).** The application shell, dashboard, library database,
-> settings, FFmpeg detection and verified encoder detection work. **Recording does not work
-> yet** — the capture engines arrive in phases 2–4. See [FEATURES.md](docs/FEATURES.md) and
+> **Status: phase 2 in progress.** Screen recording works on **Ubuntu X11** (desktop, monitor,
+> window or area; pause/resume; floating controls; tray; shortcuts). Wayland and Windows
+> capture, audio, screenshots and editing come next. See [FEATURES.md](docs/FEATURES.md) and
 > [DEVELOPMENT_PROGRESS.md](docs/DEVELOPMENT_PROGRESS.md).
 
 ## What works today
 
 * Home dashboard: recent recordings and screenshots, statistics, storage use, free disk space
   and a system readiness check (display server, audio server, FFmpeg, FFprobe, encoders, disk).
-* Video Recorder page: detected display server and capture method, connected monitors, and the
-  video encoders **verified by a real test encode** on this computer.
+* Video Recorder (X11): record the desktop, a monitor, a window or an area you draw; 24–120 fps,
+  MP4/MKV/WebM, H.264/HEVC/AV1/VP9 with the best **verified** encoder (GPU first); countdown,
+  pause/resume, auto stop, floating controls, red tray icon, Ctrl+Shift+R / Ctrl+Shift+P.
 * Recordings library and Export Center (read side; they fill up once capture and export exist).
 * Settings: start with the system, start minimized, close to tray, save folders (checked before
   saving), a specific FFmpeg, theme, accent colour, animations, logs and diagnostics, About.
@@ -26,7 +27,7 @@ and uses the same look, themes (Dark, Light, Glass, System) and settings layout.
 ## Install (Ubuntu)
 
 ```bash
-sudo apt install ./ENRecorder_0.1.0_amd64.deb   # pulls in ffmpeg
+sudo apt install ./ENRecorder_0.2.0_amd64.deb   # pulls in ffmpeg
 ```
 
 Build instructions: [docs/BUILD.md](docs/BUILD.md).

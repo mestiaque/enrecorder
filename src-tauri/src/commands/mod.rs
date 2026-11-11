@@ -4,6 +4,7 @@
 pub mod dashboard;
 pub mod library;
 pub mod media;
+pub mod recording;
 pub mod settings;
 pub mod system;
 

@@ -1,8 +1,10 @@
+use enrec_core::capture::CaptureBackend;
 use enrec_core::database::Db;
+use enrec_core::recording::session::SessionHandle;
 use enrec_core::media::ffmpeg::{Capabilities, ToolInfo};
 use enrec_core::settings::Settings;
 use enrec_core::system::SystemInfo;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -26,6 +28,10 @@ pub struct AppState {
     pub tools: RwLock<MediaTools>,
     /// Set by "Quit" so the close-to-tray handler lets the window go.
     pub quitting: AtomicBool,
+    /// The capture backend for this session's display server, or why there is none.
+    pub capture: Result<Arc<dyn CaptureBackend>, String>,
+    /// The current (or last) recording.
+    pub recorder: Mutex<Option<SessionHandle>>,
     pub data_dir: PathBuf,
     pub log_dir: PathBuf,
     pub system_videos: PathBuf,
@@ -58,5 +64,12 @@ impl AppState {
 
     pub fn capabilities_cache(&self) -> PathBuf {
         self.data_dir.join("cache").join("encoders.json")
+    }
+}
+
+impl AppState {
+    /// A recording is preparing, counting down, running, paused or being finalised.
+    pub fn recording_active(&self) -> bool {
+        self.recorder.lock().as_ref().is_some_and(|h| h.is_active())
     }
 }

@@ -2,4 +2,5 @@
 //! thumbnails and the export queue (planned, phase 5).
 
 pub mod ffmpeg;
+pub mod probe;
 pub mod process;

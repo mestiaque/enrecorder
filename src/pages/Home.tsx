@@ -10,7 +10,7 @@ import { readinessChecks } from "../lib/readiness";
 import { useNav, type PageId } from "../store/nav";
 import { toast } from "../store/ui";
 
-function QuickAction({ icon, title, text, phase, page }: { icon: ReactNode; title: string; text: string; phase: number; page: PageId }) {
+function QuickAction({ icon, title, text, phase, page }: { icon: ReactNode; title: string; text: string; phase?: number; page: PageId }) {
   return (
     <button
       onClick={() => useNav.getState().go(page)}
@@ -20,7 +20,7 @@ function QuickAction({ icon, title, text, phase, page }: { icon: ReactNode; titl
       <span className="min-w-0">
         <span className="flex items-center gap-2 text-[14px] font-medium">
           {title}
-          <span className="rounded bg-raised px-1.5 py-px text-[10px] font-semibold text-faint group-hover:bg-panel">Phase {phase}</span>
+          {phase && <span className="rounded bg-raised px-1.5 py-px text-[10px] font-semibold text-faint group-hover:bg-panel">Phase {phase}</span>}
         </span>
         <span className="mt-0.5 block text-[12px] text-muted">{text}</span>
       </span>
@@ -52,7 +52,7 @@ export function HomePage() {
       <PageHeader title="Home" subtitle="Record your screen and audio, take screenshots, then trim and export them." />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <QuickAction page="video" phase={2} icon={<MonitorPlay className="h-5 w-5" />} title="Video Recorder" text="Screen, window, region or webcam, with system audio and microphone." />
+        <QuickAction page="video" icon={<MonitorPlay className="h-5 w-5" />} title="Record the screen" text="The desktop, a monitor, a window or an area. Ctrl+Shift+R starts and stops." />
         <QuickAction page="audio" phase={3} icon={<AudioLines className="h-5 w-5" />} title="Audio Recorder" text="Microphone and system audio on separate tracks." />
         <QuickAction page="screenshot" phase={4} icon={<Camera className="h-5 w-5" />} title="Screenshot Studio" text="Full screen, window or region, then annotate." />
       </div>

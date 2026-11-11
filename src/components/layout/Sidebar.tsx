@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 import appIcon from "../../assets/enrecorder-icon.svg";
 import { cn } from "../../lib/format";
 import { useNav, type PageId } from "../../store/nav";
+import { isActive, useRecording } from "../../store/recording";
 import { useSettings } from "../../store/settings";
 import { useUi } from "../../store/ui";
 import { Tip } from "../ui/primitives";
 
 export const PAGES: { id: PageId; label: string; icon: ReactNode; phase?: number; section: "studio" | "library" }[] = [
   { id: "home", label: "Home", icon: <Home className="h-4 w-4" />, section: "studio" },
-  { id: "video", label: "Video Recorder", icon: <MonitorPlay className="h-4 w-4" />, phase: 2, section: "studio" },
+  { id: "video", label: "Video Recorder", icon: <MonitorPlay className="h-4 w-4" />, section: "studio" },
   { id: "audio", label: "Audio Recorder", icon: <AudioLines className="h-4 w-4" />, phase: 3, section: "studio" },
   { id: "screenshot", label: "Screenshot Studio", icon: <Camera className="h-4 w-4" />, phase: 4, section: "studio" },
   { id: "editor", label: "Media Editor", icon: <Scissors className="h-4 w-4" />, phase: 5, section: "studio" },
@@ -17,7 +18,7 @@ export const PAGES: { id: PageId; label: string; icon: ReactNode; phase?: number
   { id: "exports", label: "Export Center", icon: <ListVideo className="h-4 w-4" />, section: "library" },
 ];
 
-function NavRow({ icon, label, active, onClick, collapsed, soon, shortcut }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void; collapsed: boolean; soon?: boolean; shortcut?: string }) {
+function NavRow({ icon, label, active, onClick, collapsed, soon, shortcut, live }: { icon: ReactNode; label: string; active?: boolean; onClick: () => void; collapsed: boolean; soon?: boolean; shortcut?: string; live?: boolean }) {
   const btn = (
     <button
       onClick={onClick}
@@ -28,7 +29,10 @@ function NavRow({ icon, label, active, onClick, collapsed, soon, shortcut }: { i
         collapsed && "justify-center px-0",
       )}
     >
-      <span className={cn("shrink-0", active && "text-accent")}>{icon}</span>
+      <span className={cn("relative shrink-0", active && "text-accent")}>
+        {icon}
+        {live && <span className="absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-danger" />}
+      </span>
       {!collapsed && <span className="min-w-0 flex-1 truncate">{label}</span>}
       {!collapsed && soon && <span className="rounded bg-raised px-1 text-[10px] text-faint group-hover:bg-panel">soon</span>}
     </button>
@@ -55,9 +59,10 @@ export function Sidebar() {
   const collapsed = useSettings((s) => s.settings.sidebarCollapsed);
   const page = useNav((s) => s.page);
   const go = useNav((s) => s.go);
+  const recording = useRecording((s) => isActive(s.snap));
   const rows = (section: "studio" | "library") =>
     PAGES.filter((p) => p.section === section).map((p) => (
-      <NavRow key={p.id} collapsed={collapsed} icon={p.icon} label={p.label} active={page === p.id} soon={!!p.phase} shortcut={`Ctrl+${PAGES.indexOf(p) + 1}`} onClick={() => go(p.id)} />
+      <NavRow key={p.id} collapsed={collapsed} icon={p.icon} label={p.label} active={page === p.id} soon={!!p.phase} shortcut={`Ctrl+${PAGES.indexOf(p) + 1}`} live={p.id === "video" && recording} onClick={() => go(p.id)} />
     ));
   return (
     <aside className={cn("flex shrink-0 flex-col border-r border-line bg-panel transition-[width] duration-200", collapsed ? "w-[52px]" : "w-[220px]")}>

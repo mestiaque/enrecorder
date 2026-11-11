@@ -71,6 +71,30 @@ pub struct ExportJobRow {
     pub finished_at: Option<i64>,
 }
 
+pub struct NewSession {
+    pub id: String,
+    /// "video" | "audio"
+    pub kind: String,
+    pub state: String,
+    /// JSON of the capture source.
+    pub source: String,
+    /// JSON snapshot of the options used.
+    pub settings: String,
+    pub output_path: Option<String>,
+}
+
+pub struct NewRecording {
+    pub kind: String,
+    pub title: String,
+    pub path: String,
+    pub container: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub size_bytes: i64,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub session_id: Option<String>,
+}
+
 /// Library query from the Recordings page. Only these fixed sort keys exist, so no SQL is
 /// ever built from user text (the search term is a bound parameter).
 #[derive(Debug, Clone, Default, serde::Deserialize)]
@@ -266,6 +290,53 @@ impl Db {
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(AppError::from)
     }
 
+    // ---------------------------------------------------------------- capture sessions
+
+    pub fn insert_session(&self, s: &NewSession) -> Result<()> {
+        self.conn.lock().execute(
+            "INSERT INTO capture_sessions(id, kind, state, source, settings, output_path, started_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![s.id, s.kind, s.state, s.source, s.settings, s.output_path, now_ms()],
+        )?;
+        Ok(())
+    }
+
+    /// Records a state change; final states also set `ended_at`.
+    pub fn set_session_state(&self, id: &str, state: &str, error: Option<&str>) -> Result<()> {
+        let ended = matches!(state, "completed" | "failed" | "cancelled" | "interrupted").then(now_ms);
+        self.conn.lock().execute(
+            "UPDATE capture_sessions SET state = ?2, error = COALESCE(?3, error), ended_at = COALESCE(?4, ended_at) WHERE id = ?1",
+            params![id, state, error, ended],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_session_output(&self, id: &str, path: &str) -> Result<()> {
+        self.conn.lock().execute("UPDATE capture_sessions SET output_path = ?2 WHERE id = ?1", params![id, path])?;
+        Ok(())
+    }
+
+    /// Adds a finished recording and its FFprobe metadata in one transaction. Returns its id.
+    pub fn insert_recording(&self, r: &NewRecording, probe: Option<&crate::media::probe::Probe>) -> Result<String> {
+        let id = new_id();
+        let now = now_ms();
+        let mut c = self.conn.lock();
+        let tx = c.transaction()?;
+        tx.execute(
+            "INSERT INTO recordings(id, kind, title, path, container, duration_ms, size_bytes, width, height, status, session_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'ready', ?10, ?11, ?11)",
+            params![id, r.kind, r.title, r.path, r.container, r.duration_ms, r.size_bytes, r.width, r.height, r.session_id, now],
+        )?;
+        if let Some(p) = probe {
+            tx.execute(
+                "INSERT INTO media_metadata(recording_id, container, video_codec, audio_codec, width, height, fps, duration_ms, bitrate, video_streams, audio_streams, raw, probed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                params![id, p.container, p.video_codec, p.audio_codec, p.width, p.height, p.fps, p.duration_ms, p.bitrate, p.video_streams, p.audio_streams, p.raw, now],
+            )?;
+        }
+        tx.commit()?;
+        Ok(id)
+    }
+
     /// Test and recovery helper: run one statement (never called with user input).
     #[doc(hidden)]
     pub fn execute_raw(&self, sql: &str) -> Result<usize> {
@@ -370,6 +441,27 @@ mod tests {
         assert_eq!(d.query_i64("SELECT COUNT(*) FROM capture_sessions WHERE state = 'interrupted'").unwrap(), Some(1));
         assert_eq!(d.query_i64("SELECT COUNT(*) FROM recordings WHERE status = 'interrupted'").unwrap(), Some(1));
         assert_eq!(d.library_stats().unwrap().interrupted, 1);
+    }
+
+    #[test]
+    fn sessions_and_recordings() {
+        let d = db();
+        d.insert_session(&NewSession { id: "s1".into(), kind: "video".into(), state: "preparing".into(), source: "{}".into(), settings: "{}".into(), output_path: None }).unwrap();
+        d.set_session_state("s1", "recording", None).unwrap();
+        assert_eq!(d.query_i64("SELECT COUNT(*) FROM capture_sessions WHERE state = 'recording' AND ended_at IS NULL").unwrap(), Some(1));
+        let probe = crate::media::probe::Probe { video_codec: Some("h264".into()), duration_ms: Some(3000), video_streams: 1, ..Default::default() };
+        let id = d
+            .insert_recording(
+                &NewRecording { kind: "video".into(), title: "Demo".into(), path: "/v/demo.mp4".into(), container: Some("mp4".into()), duration_ms: Some(3000), size_bytes: 10, width: Some(2), height: Some(2), session_id: Some("s1".into()) },
+                Some(&probe),
+            )
+            .unwrap();
+        d.set_session_state("s1", "completed", None).unwrap();
+        assert_eq!(d.query_i64("SELECT COUNT(*) FROM capture_sessions WHERE state = 'completed' AND ended_at IS NOT NULL").unwrap(), Some(1));
+        assert_eq!(d.query_i64(&format!("SELECT duration_ms FROM media_metadata WHERE recording_id = '{id}'")).unwrap(), Some(3000));
+        assert_eq!(d.list_media(&LibraryQuery::default()).unwrap()[0].title, "Demo");
+        // The same path cannot be added twice.
+        assert!(d.insert_recording(&NewRecording { kind: "video".into(), title: "x".into(), path: "/v/demo.mp4".into(), container: None, duration_ms: None, size_bytes: 0, width: None, height: None, session_id: None }, None).is_err());
     }
 
     #[test]

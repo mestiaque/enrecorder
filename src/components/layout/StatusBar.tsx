@@ -1,5 +1,6 @@
 import { HardDrive } from "lucide-react";
-import { formatBytes } from "../../lib/format";
+import { formatBytes, formatDuration } from "../../lib/format";
+import { isActive, useRecording } from "../../store/recording";
 import { useDashboard, useSystem, useTools } from "../../lib/queries";
 import { shortVersion } from "../../lib/readiness";
 
@@ -9,6 +10,7 @@ export function StatusBar() {
   const { data: tools } = useTools();
   const { data: sys } = useSystem();
   const { data: dash } = useDashboard();
+  const rec = useRecording((s) => s.snap);
   const verified = tools?.capabilities?.encoders.filter((e) => e.verified).length;
   const ffmpeg = !tools
     ? "…"
@@ -27,6 +29,12 @@ export function StatusBar() {
         </span>
       )}
       <span className="flex-1" />
+      {isActive(rec) && rec && (
+        <span className="flex items-center gap-1.5 font-medium text-danger">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-danger" />
+          {rec.state === "paused" ? "Paused" : rec.state === "finalizing" ? "Saving" : "REC"} {formatDuration(rec.elapsedMs)}
+        </span>
+      )}
       {dash?.disk && (
         <span className="flex items-center gap-1 tabular-nums">
           <HardDrive className="h-3 w-3" />

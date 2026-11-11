@@ -24,3 +24,19 @@ make sure `xdg-desktop-portal` and the portal for your desktop (`-gnome`, `-kde`
 and **Copy diagnostics** for bug reports.
 
 **Reset** — Settings → General → Reset all settings (recordings are not touched).
+
+**Recording does not start: "FFmpeg could not start recording: …"** — the message is FFmpeg's
+own. With a hardware encoder, choose "Automatic" or a software encoder (libx264) and try again;
+Settings → Logs shows the full FFmpeg command.
+
+**The area selector covers the screen in black** — your desktop has no compositor (rare on
+GNOME/KDE). The selection still works; the black is only the overlay's background.
+
+**Ctrl+Shift+R does nothing** — another app may already use the shortcut (Settings → Logs shows
+"shortcut … is not available"). Use the tray menu or the floating controls instead.
+
+**Where are the parts of a failed recording?** — in a hidden folder `.enrecorder-<id>` inside
+the recordings folder; each part is a playable MKV. Automatic recovery arrives in phase 7.
+
+**Wayland** — recording on Wayland is still being built (later in phase 2). Until then choose
+"Ubuntu on Xorg" on the login screen.

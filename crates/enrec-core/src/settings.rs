@@ -25,6 +25,27 @@ pub struct Settings {
     pub screenshots_dir: String,
     // Tools — empty means "find automatically".
     pub ffmpeg_path: String,
+    // Recording defaults (the Video Recorder form remembers the last choice here)
+    pub rec_fps: u32,
+    /// "native" | "720" | "1080" | "1440" | "2160"
+    pub rec_resolution: String,
+    /// "mp4" | "mkv" | "webm"
+    pub rec_format: String,
+    /// "h264" | "hevc" | "av1" | "vp9"
+    pub rec_codec: String,
+    /// "auto" or an encoder name (must be verified when recording starts).
+    pub rec_encoder: String,
+    /// "high" | "balanced" | "small"
+    pub rec_quality: String,
+    pub rec_cursor: bool,
+    /// Seconds: 0, 3, 5 or 10.
+    pub rec_countdown: u32,
+    /// Minutes; 0 = no limit.
+    pub rec_max_minutes: u32,
+    /// Hide the main window while recording (it would otherwise be in the recording).
+    pub rec_hide_window: bool,
+    /// Show the floating recording controls.
+    pub rec_show_hud: bool,
     // Appearance
     /// "dark" | "light" | "glass" | "system"
     pub theme: String,
@@ -43,6 +64,17 @@ impl Default for Settings {
             recordings_dir: String::new(),
             screenshots_dir: String::new(),
             ffmpeg_path: String::new(),
+            rec_fps: 30,
+            rec_resolution: "native".into(),
+            rec_format: "mp4".into(),
+            rec_codec: "h264".into(),
+            rec_encoder: "auto".into(),
+            rec_quality: "balanced".into(),
+            rec_cursor: true,
+            rec_countdown: 3,
+            rec_max_minutes: 0,
+            rec_hide_window: true,
+            rec_show_hud: true,
             theme: "dark".into(),
             accent: "#6366f1".into(),
             animations: true,
@@ -83,6 +115,28 @@ impl Settings {
         if !is_hex_color(&self.accent) {
             self.accent = d.accent;
         }
+        if !matches!(self.rec_fps, 24 | 30 | 60 | 120) {
+            self.rec_fps = d.rec_fps;
+        }
+        if !matches!(self.rec_resolution.as_str(), "native" | "720" | "1080" | "1440" | "2160") {
+            self.rec_resolution = d.rec_resolution;
+        }
+        if !matches!(self.rec_format.as_str(), "mp4" | "mkv" | "webm") {
+            self.rec_format = d.rec_format;
+        }
+        if !matches!(self.rec_codec.as_str(), "h264" | "hevc" | "av1" | "vp9") {
+            self.rec_codec = d.rec_codec;
+        }
+        if self.rec_encoder.trim().is_empty() || self.rec_encoder.len() > 40 || !self.rec_encoder.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            self.rec_encoder = d.rec_encoder;
+        }
+        if !matches!(self.rec_quality.as_str(), "high" | "balanced" | "small") {
+            self.rec_quality = d.rec_quality;
+        }
+        if !matches!(self.rec_countdown, 0 | 3 | 5 | 10) {
+            self.rec_countdown = d.rec_countdown;
+        }
+        self.rec_max_minutes = self.rec_max_minutes.min(24 * 60);
         if !matches!(self.language.as_str(), "en") {
             self.language = d.language;
         }
@@ -163,7 +217,13 @@ mod tests {
         m.insert("closeToTray".to_string(), json!(false));
         m.insert("recordingsDir".to_string(), json!("relative/dir"));
         m.insert("unknown".to_string(), json!(1));
+        m.insert("recFps".to_string(), json!(25));
+        m.insert("recEncoder".to_string(), json!("libx264; rm -rf /"));
+        m.insert("recMaxMinutes".to_string(), json!(99999));
         let s = Settings::from_map(&m);
+        assert_eq!(s.rec_fps, 30);
+        assert_eq!(s.rec_encoder, "auto");
+        assert_eq!(s.rec_max_minutes, 1440);
         assert_eq!(s.theme, "dark");
         assert_eq!(s.accent, "#6366f1");
         assert!(!s.start_minimized);

@@ -168,6 +168,7 @@ pub fn open_log_folder(app: AppHandle, state: State<AppState>) -> Result<()> {
     app.opener().open_path(state.log_dir.to_string_lossy(), None::<&str>).map_err(tauri_err)
 }
 
+/// Quits; a running recording is stopped and saved first.
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
     crate::quit(&app);

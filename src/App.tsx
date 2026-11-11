@@ -1,11 +1,15 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
 import { Toolbar } from "./components/layout/Toolbar";
 import { SettingsDialog } from "./components/settings/SettingsDialog";
+import { CountdownOverlay } from "./components/recording/LivePanel";
 import { ConfirmHost, PromptHost, Toaster } from "./components/ui/overlays";
+import { api, EVENTS } from "./lib/api";
+import { queryClient } from "./lib/queryClient";
 import { AudioRecorderPage } from "./pages/AudioRecorder";
 import { EditorPage } from "./pages/Editor";
 import { ExportsPage } from "./pages/Exports";
@@ -15,9 +19,9 @@ import { ScreenshotPage } from "./pages/Screenshot";
 import { VideoRecorderPage } from "./pages/VideoRecorder";
 import { PAGE_IDS, useNav, type PageId } from "./store/nav";
 import { useSettings } from "./store/settings";
-import { useUi } from "./store/ui";
-
-const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } } });
+import { startRecording } from "./store/recorderForm";
+import { useRecording } from "./store/recording";
+import { confirmDialog, useUi } from "./store/ui";
 
 function hexToRgb(hex: string): string {
   const m = hex.replace("#", "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
@@ -87,6 +91,7 @@ const PAGES: Record<PageId, () => JSX.Element> = {
 export default function App() {
   const [ready, setReady] = useState(false);
   const page = useNav((s) => s.page);
+  const snap = useRecording((s) => s.snap);
   useTheme();
   useKeys();
 
@@ -98,7 +103,21 @@ export default function App() {
       if (t.tagName !== "INPUT" && t.tagName !== "TEXTAREA" && !t.closest("pre")) e.preventDefault();
     };
     window.addEventListener("contextmenu", onContext);
-    return () => window.removeEventListener("contextmenu", onContext);
+    let offRec: (() => void) | undefined;
+    void useRecording.getState().init().then((f) => (offRec = f));
+    // Ctrl+Shift+R / tray → start with the current form.
+    const unStart = listen(EVENTS.startRequest, () => void startRecording());
+    // Quit while recording: ask first; quitting stops and saves the recording.
+    const unQuit = listen(EVENTS.confirmQuit, async () => {
+      const ok = await confirmDialog({ title: "Quit while recording?", message: "The recording is stopped and saved, then ENRecorder quits.", confirmLabel: "Stop, save and quit", danger: true });
+      if (ok) void api.quitApp();
+    });
+    return () => {
+      window.removeEventListener("contextmenu", onContext);
+      offRec?.();
+      void unStart.then((f) => f());
+      void unQuit.then((f) => f());
+    };
   }, []);
 
   if (!ready) return <div className="h-full bg-bg" />;
@@ -119,6 +138,7 @@ export default function App() {
             <StatusBar />
           </main>
         </div>
+        {snap?.state === "countdown" && <CountdownOverlay snap={snap} />}
         <SettingsDialog />
         <ConfirmHost />
         <PromptHost />

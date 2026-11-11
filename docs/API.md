@@ -28,6 +28,28 @@ TypeScript types live in `src/lib/types.ts` and mirror the Rust structs (camelCa
 | `list_media` | `query: { filter, search, sort, limit? }` | `MediaItem[]` — filter `all|video|audio|screenshot|favorites`, sort `newest|oldest|name|size|duration`; unknown values fall back to defaults; the search is a bound parameter with `%`/`_` escaped |
 | `list_export_jobs` | — | `ExportJob[]` (newest first, max 200) |
 
+## Video recording
+
+| Command | Arguments | Returns |
+|---|---|---|
+| `list_capture_sources` | — | `{ backend: "x11" \| "waylandPortal" \| "windowsGraphicsCapture" \| null, unsupported?: string, sources: CaptureSource[] }` |
+| `start_video_recording` | `options: RecordingOptions` | `RecordingSnapshot` (the session starts; recording begins after the countdown) |
+| `pause_recording` / `resume_recording` | — | — |
+| `stop_recording` | — | — (during the countdown this cancels) |
+| `recording_status` | — | `RecordingSnapshot \| null` (current or last session) |
+| `open_region_selector` | — | opens the area overlay on the main window's monitor |
+| `region_selected` | `rect: CaptureSource(region) \| null` | called by the overlay; emits `region-selected` |
+
+`CaptureSource` = `{type:"desktop",width,height}` · `{type:"monitor",id,name,width,height,x,y,primary}` ·
+`{type:"window",id,title,app,width,height}` · `{type:"region",x,y,width,height}` (physical pixels).
+
+`RecordingOptions` = `{ source, fps (24|30|60|120), resolution ("native"|"720"|"1080"|"1440"|"2160"),
+format ("mp4"|"mkv"|"webm"), codec ("h264"|"hevc"|"av1"|"vp9"), encoder ("auto"|name), quality
+("high"|"balanced"|"small"), showCursor, countdown (s), maxMinutes (0 = none) }`.
+
+`RecordingSnapshot` = `{ sessionId, state, countdownLeft, elapsedMs, segments, frames, dropped, fps,
+sizeBytes, encoder, width, height, source, outputPath?, recordingId?, error?, notice? }`.
+
 ## System
 
 | Command | Arguments | Returns |
@@ -47,8 +69,12 @@ TypeScript types live in `src/lib/types.ts` and mirror the Rust structs (camelCa
 | Event | Payload | When |
 |---|---|---|
 | `tools-changed` | — | FFmpeg search or encoder test started or finished (the UI refetches `media_tools`) |
+| `recording-state` | `RecordingSnapshot` | every state change, and once per countdown second |
+| `recording-progress` | `RecordingSnapshot` | timer/size/frames, at most 4 per second |
+| `region-selected` | `CaptureSource \| null` | the area overlay finished (null = cancelled) |
+| `recording-start-request` | — | Ctrl+Shift+R or tray asks the main window to start with its form |
+| `confirm-quit` | — | quit was requested while recording; the UI asks before calling `quit_app` |
 
-Planned events (phases 2–5): `recording-started`, `recording-paused`, `recording-resumed`,
-`recording-stopped`, `recording-progress`, `audio-level`, `device-changed`, `capture-error`,
+Planned events (phases 3–5): `audio-level`, `device-changed`,
 `export-progress`, `export-completed`, `export-failed`, `storage-warning` — throttled to at most
 10 per second for the UI.

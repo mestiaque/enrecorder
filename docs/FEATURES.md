@@ -26,11 +26,32 @@ strength of mocked tests alone.
 | Logs viewer, copy diagnostics | Done | |
 | Windows build | Not tested | code is `cfg`-gated; no Windows machine in this environment |
 
+## Screen recording (phase 2)
+
+| Feature | Status | Notes |
+|---|---|---|
+| X11 backend: entire desktop, monitor (RandR), window (EWMH list), area | Done | FFmpeg `x11grab` (XCB/XShm); tested in Xvfb (UI end to end) and on real hardware (Intel UHD 620, GNOME X11) |
+| Area selection overlay (drag, size label, Enter/Esc) | Done | transparent over GNOME; opaque without a compositor |
+| Recording settings: 24/30/60/120 fps, native/720p/1080p/1440p/4K (downscale only), MP4/MKV/WebM, H.264/HEVC/AV1/VP9, encoder (automatic = best verified, hardware first), quality, cursor | Done | invalid combinations refused before recording |
+| Countdown (0/3/5/10 s, cancellable), pause/resume, stop, timer, auto stop after N minutes | Done | pause = new MKV segment; segments joined without re-encoding |
+| Recording state machine wired to the session (idle → preparing → countdown → recording ⇄ paused → finalizing → completed/failed/cancelled) | Done | every state stored in `capture_sessions` |
+| Output verification with FFprobe, library row + metadata, automatic naming, unique file names | Done | |
+| Disk space monitoring (stops cleanly below 500 MB free) | Done | |
+| Failure handling: FFmpeg that does not start / dies → failed with its message; parts kept for recovery | Done | |
+| Floating controls (timer, pause/resume, stop), hide main window while recording, red tray icon + tooltip, tray start/stop/pause | Done | on X11 the floating bar is recorded when it is inside the recorded area |
+| Global shortcuts Ctrl+Shift+R (start/stop), Ctrl+Shift+P (pause/resume) | Done | fixed for now; customisable shortcuts later |
+| Quit while recording asks first, then stops and saves | Done | |
+| X11 window capture limits | Known | covered windows are captured too; a window keeps its starting size |
+| Wayland backend (xdg-desktop-portal ScreenCast + PipeWire) | Planned (phase 2, next) | the app explains this on Wayland; detection is done |
+| Windows backend (Windows.Graphics.Capture) | Planned (phase 2, next) | |
+| Scheduled recording, file splitting | Planned (phase 6) | |
+| Audio in screen recordings | Planned (phase 3) | recordings are video only |
+
 ## Planned
 
 | Area | Phase |
 |---|---|
-| Screen capture: Windows.Graphics.Capture, X11, Wayland portal + PipeWire; recording state machine wired to FFmpeg; HUD; countdown; pause/resume; file splitting; disk monitoring | 2 |
+| Wayland portal + PipeWire and Windows.Graphics.Capture backends | 2 (rest) |
 | Audio: device manager, microphone, system audio (WASAPI loopback / PipeWire), meters, multi-track, mixing | 3 |
 | Screenshots: full screen, monitor, window, region, delay; annotation editor; PNG/JPEG/WebP; clipboard | 4 |
 | Library actions (rename, delete, tags, favourites, preview, metadata via FFprobe, thumbnails); export queue; basic editor | 5 |

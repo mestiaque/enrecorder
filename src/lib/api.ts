@@ -1,6 +1,6 @@
 /** Typed wrappers around the Rust commands: one function per command. */
 import { invoke } from "@tauri-apps/api/core";
-import type { AboutInfo, AppPaths, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, Settings, SettingsPayload, SystemInfo } from "./types";
+import type { AboutInfo, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
 
 export const api = {
   getSettings: () => invoke<SettingsPayload>("get_settings"),
@@ -13,6 +13,15 @@ export const api = {
   dashboard: () => invoke<Dashboard>("dashboard"),
   listMedia: (query: LibraryQuery) => invoke<MediaItem[]>("list_media", { query }),
   listExportJobs: () => invoke<ExportJob[]>("list_export_jobs"),
+
+  listCaptureSources: () => invoke<SourcesPayload>("list_capture_sources"),
+  recordingStatus: () => invoke<RecordingSnapshot | null>("recording_status"),
+  startRecording: (options: RecordingOptions) => invoke<RecordingSnapshot>("start_video_recording", { options }),
+  pauseRecording: () => invoke<void>("pause_recording"),
+  resumeRecording: () => invoke<void>("resume_recording"),
+  stopRecording: () => invoke<void>("stop_recording"),
+  openRegionSelector: () => invoke<void>("open_region_selector"),
+  regionSelected: (rect: CaptureSource | null) => invoke<void>("region_selected", { rect }),
 
   systemInfo: () => invoke<SystemInfo>("system_info"),
   appPaths: () => invoke<AppPaths>("app_paths"),
@@ -29,7 +38,14 @@ export const api = {
 };
 
 /** Event names emitted by the backend. */
-export const EVENTS = { toolsChanged: "tools-changed" } as const;
+export const EVENTS = {
+  toolsChanged: "tools-changed",
+  recordingState: "recording-state",
+  recordingProgress: "recording-progress",
+  regionSelected: "region-selected",
+  startRequest: "recording-start-request",
+  confirmQuit: "confirm-quit",
+} as const;
 
 /** Commands reject with `{ kind, message }` (AppError) or a plain string. */
 export function errorMessage(e: unknown): string {
