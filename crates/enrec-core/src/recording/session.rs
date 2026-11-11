@@ -412,6 +412,7 @@ impl Runner {
             Some(slot) => args.extend(pipe_input_args(slot.width, slot.height, self.p.options.fps)),
             None => args.extend(self.p.input.args.iter().cloned()),
         }
+        args.extend(self.p.plan.video_inputs.iter().cloned());
         args.extend(self.p.plan.audio_inputs.iter().cloned());
         args.extend(self.p.plan.encode.iter().cloned());
         args.extend(["-f".into(), "matroska".into(), "-y".into(), path.to_string_lossy().into_owned()]);
@@ -680,6 +681,7 @@ mod tests {
         // A synthetic source stands in for the screen: same pipeline, no display needed.
         let input = CaptureInput { args: vec!["-re".into(), "-f".into(), "lavfi".into(), "-i".into(), "testsrc2=size=320x240:rate=30".into()], width: 320, height: 240, frames: None };
         let plan = EncodePlan {
+            video_inputs: vec![],
             audio_inputs: vec![],
             audio_only: false,
             encoder: "libx264".into(),
@@ -701,6 +703,7 @@ mod tests {
             countdown,
             max_minutes: 0,
             audio: Default::default(),
+            webcam: Default::default(),
         };
         Some(StartParams { db, ffmpeg: PathBuf::from(ff.path), ffprobe: probe, input, plan, options, output_dir: dir.to_path_buf(), file_stem: "Test recording".into(), min_free_bytes: 0 })
     }
@@ -869,7 +872,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let db = Arc::new(Db::open_in_memory().unwrap());
         let Some(mut p) = params(dir.path(), db.clone(), "mp4", 0) else { return };
-        let opts = crate::audio::AudioOptions { microphone: Some("m".into()), system: Some("s".into()), separate_tracks: false, mic_volume: 100, system_volume: 100 };
+        let opts = crate::audio::AudioOptions { microphone: Some("m".into()), system: Some("s".into()), separate_tracks: false, mic_volume: 100, system_volume: 100, mic_denoise: true, mic_normalize: true };
         let ap = crate::audio::plan(&opts, 1, crate::audio::codec_for("mp4"), true);
         p.plan.audio_inputs = strs(&["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=48000"]);
         p.plan.encode.retain(|a| a != "-an");
@@ -928,7 +931,7 @@ mod tests {
         let db = Arc::new(Db::open_in_memory().unwrap());
         let Some(mut p) = params(dir.path(), db.clone(), "m4a", 0) else { return };
         let opts = crate::recording::AudioRecordingOptions {
-            audio: crate::audio::AudioOptions { microphone: Some("m".into()), system: Some("s".into()), separate_tracks: true, mic_volume: 100, system_volume: 100 },
+            audio: crate::audio::AudioOptions { microphone: Some("m".into()), system: Some("s".into()), separate_tracks: true, mic_volume: 100, system_volume: 100, mic_denoise: false, mic_normalize: false },
             format: "m4a".into(),
             quality: "balanced".into(),
             countdown: 0,
@@ -953,5 +956,41 @@ mod tests {
         let ff = find_tool("ffprobe", None, &[]).unwrap();
         let pr = probe::probe(Path::new(&ff.path), Path::new(s.output_path.as_ref().unwrap())).unwrap();
         assert_eq!(pr.audio_streams, 2);
+    }
+
+    /// Webcam overlay (a test pattern stands in for the camera) with microphone audio: the
+    /// real plan's graph, through a pause, into one MP4.
+    #[test]
+    fn records_with_a_webcam_overlay() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let Some(mut p) = params(dir.path(), db.clone(), "mp4", 0) else { return };
+        p.options.webcam = crate::webcam::WebcamOptions { device: Some("cam".into()), ..Default::default() };
+        p.options.audio = crate::audio::AudioOptions { microphone: Some("m".into()), ..Default::default() };
+        let caps = crate::media::ffmpeg::Capabilities {
+            ffmpeg: crate::media::ffmpeg::ToolInfo { path: String::new(), version: String::new() },
+            encoders: vec![crate::media::ffmpeg::EncoderStatus { name: "libx264".into(), codec: Codec::H264, vendor: crate::media::ffmpeg::Vendor::Software, listed: true, verified: true, detail: String::new() }],
+            checked_at: 0,
+        };
+        let mut plan = crate::recording::plan(&p.options, &p.input, &caps).unwrap();
+        assert!(plan.encode.iter().any(|a| a.contains("overlay=")));
+        plan.video_inputs = strs(&["-re", "-f", "lavfi", "-i", "smptebars=size=160x120:rate=30"]);
+        plan.audio_inputs = strs(&["-re", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000"]);
+        p.plan = plan;
+        let mut h = start(p, Arc::new(Record::default())).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1200));
+        h.send(Command::Pause).unwrap();
+        wait_state(&h, RecState::Paused);
+        h.send(Command::Resume).unwrap();
+        wait_state(&h, RecState::Recording);
+        std::thread::sleep(Duration::from_millis(1200));
+        h.send(Command::Stop).unwrap();
+        assert!(h.wait(Duration::from_secs(30)));
+        let s = h.snapshot();
+        assert_eq!(s.state, RecState::Completed, "{:?}", s.error);
+        let ff = find_tool("ffprobe", None, &[]).unwrap();
+        let pr = probe::probe(Path::new(&ff.path), Path::new(s.output_path.as_ref().unwrap())).unwrap();
+        assert_eq!((pr.video_streams, pr.audio_streams, pr.width), (1, 1, Some(320)));
     }
 }

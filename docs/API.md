@@ -40,10 +40,13 @@ TypeScript types live in `src/lib/types.ts` and mirror the Rust structs (camelCa
 | `open_region_selector` | — | opens the area overlay on the main window's monitor |
 | `region_selected` | `rect: CaptureSource(region) \| null` | called by the overlay; emits `region-selected` |
 
+| `list_cameras` | — | `Camera[]` = `{ id, name }` |
 | `list_audio_devices` | — | `AudioDevice[]` = `{ id, name, kind: "microphone"\|"system", default }` |
 | `start_audio_recording` | `options: AudioRecordingOptions` | `RecordingSnapshot` (audio only; pause/resume/stop as above) |
 
-`AudioOptions` = `{ microphone?: id, system?: id, separateTracks, micVolume, systemVolume (percent, 0–200) }`;
+`AudioOptions` = `{ microphone?: id, system?: id, separateTracks, micVolume, systemVolume (percent, 0–200),
+micDenoise, micNormalize }`; `WebcamOptions` = `{ device?: id, position, size (10–40 %), shape: "circle"|"rectangle" }`
+(in `RecordingOptions.webcam`);
 `AudioRecordingOptions` = `{ audio: AudioOptions, format ("mp3"|"m4a"|"opus"|"flac"|"wav"), quality, countdown, maxMinutes }`.
 
 `CaptureSource` = `{type:"desktop",width,height}` · `{type:"monitor",id,name,width,height,x,y,primary}` ·
@@ -71,7 +74,7 @@ audioTracks, audioOnly }`.
 | `cancel_export` | `id` (job) | — |
 
 `ExportPreset` = `{ kind: "convert"|"compress"|"audio"|"gif"|"trim", format, quality, startMs?, endMs?,
-maxHeight?, removeAudio?, volume? }`. Event `export-progress`: `{ id, status, progress, error?, outputPath }`.
+maxHeight?, removeAudio?, volume?, denoise?, normalize? }`. Event `export-progress`: `{ id, status, progress, error?, outputPath }`.
 
 ## Screenshots
 
@@ -81,6 +84,9 @@ maxHeight?, removeAudio?, volume? }`. Event `export-progress`: `{ id, status, pr
 | `screenshot_image` | `id` | base64 PNG of the original |
 | `save_screenshot` | `id`, `png` (base64/data URL), `format` ("png"\|"jpeg"\|"webp"), `quality`, `annotations?` (JSON) | `Screenshot` |
 | `copy_screenshot` | `png` | — |
+| `ocr_status` | — | `{ available, languages }` |
+| `ocr_screenshot` | `png`, `languages` ("eng+ben") | recognised text |
+| `copy_text` | `text` | — |
 | `get_screenshot` | `id` | `Screenshot` = `{ id, title, path, format, width, height, sizeBytes, annotations?, createdAt }` |
 
 ## System

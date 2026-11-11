@@ -36,6 +36,9 @@ pub struct RecordingOptions {
     /// Microphone and/or system audio (phase 3). Off when absent.
     #[serde(default)]
     pub audio: crate::audio::AudioOptions,
+    /// Camera picture in a corner (phase 6). Off when absent.
+    #[serde(default)]
+    pub webcam: crate::webcam::WebcamOptions,
 }
 
 /// What a recording needs from FFmpeg besides the capture input.
@@ -46,7 +49,9 @@ pub struct EncodePlan {
     pub pre_input: Vec<String>,
     /// Filters, encoder and its quality settings (no output file).
     pub encode: Vec<String>,
-    /// Audio device inputs, placed after the video input.
+    /// Extra video inputs (webcam), placed right after the capture input.
+    pub video_inputs: Vec<String>,
+    /// Audio device inputs, placed after the video inputs.
     pub audio_inputs: Vec<String>,
     /// Audio-only recording (no video input, verified for audio).
     pub audio_only: bool,
@@ -133,7 +138,7 @@ pub fn plan(opts: &RecordingOptions, input: &CaptureInput, caps: &Capabilities) 
     let q = opts.quality.as_str();
 
     // Size and pixel format; hardware encoders take frames uploaded to the GPU.
-    let mut vf = if (w, h) != (input.width & !1, input.height & !1) {
+    let base = if (w, h) != (input.width & !1, input.height & !1) {
         format!("scale={w}:{h}:flags=bicubic")
     } else {
         "crop=trunc(iw/2)*2:trunc(ih/2)*2".to_string()
@@ -143,15 +148,25 @@ pub fn plan(opts: &RecordingOptions, input: &CaptureInput, caps: &Capabilities) 
         (Vendor::Vaapi, _) => {
             let dev = render_node().map_or_else(|| "/dev/dri/renderD128".to_string(), |p| p.to_string_lossy().into_owned());
             pre_input.extend(["-vaapi_device".to_string(), dev]);
-            vf.push_str(",format=nv12,hwupload");
         }
         (Vendor::Intel, _) => {
             pre_input.extend(["-init_hw_device".into(), "qsv=hw".into(), "-filter_hw_device".into(), "hw".into()]);
-            vf.push_str(",format=nv12,hwupload=extra_hw_frames=64,format=qsv");
         }
-        _ => vf.push_str(",format=yuv420p"),
+        _ => {}
     }
-    let mut enc: Vec<String> = vec!["-vf".into(), vf, "-c:v".into(), encoder.clone(), "-g".into(), (opts.fps * 2).to_string()];
+    let after = match vendor {
+        Vendor::Vaapi => "format=nv12,hwupload",
+        Vendor::Intel => "format=nv12,hwupload=extra_hw_frames=64,format=qsv",
+        _ => "format=yuv420p",
+    };
+    // Webcam: a second video input overlaid before the pixel format / GPU upload.
+    let cam = opts.webcam.device.as_deref().filter(|d| !d.is_empty());
+    let video_inputs = cam.map(|d| crate::webcam::input_args(d, opts.fps)).unwrap_or_default();
+    let mut enc: Vec<String> = match cam {
+        Some(_) => vec!["-filter_complex".into(), crate::webcam::overlay_graph(&opts.webcam, 1, w, &base, after), "-map".into(), "[vout]".into()],
+        None => vec!["-vf".into(), format!("{base},{after}")],
+    };
+    enc.extend(["-c:v".into(), encoder.clone(), "-g".into(), (opts.fps * 2).to_string()]);
     let push = |enc: &mut Vec<String>, items: &[&str]| enc.extend(items.iter().map(|s| s.to_string()));
     match encoder.as_str() {
         "libx264" => {
@@ -199,14 +214,17 @@ pub fn plan(opts: &RecordingOptions, input: &CaptureInput, caps: &Capabilities) 
         _ => "mp4",
     };
     // Audio from the same FFmpeg process: one clock, one file per segment.
-    let audio = crate::audio::plan(&opts.audio, 1, crate::audio::codec_for(extension), true);
+    let first_audio = 1 + usize::from(cam.is_some());
+    let audio = crate::audio::plan(&opts.audio, first_audio, crate::audio::codec_for(extension), true);
     if audio.inputs.is_empty() {
         enc.push("-an".into());
     } else {
-        enc.extend(["-map".into(), "0:v".into()]);
+        if cam.is_none() {
+            enc.extend(["-map".into(), "0:v".into()]);
+        }
         enc.extend(audio.output);
     }
-    Ok(EncodePlan { encoder, pre_input, encode: enc, audio_inputs: audio.inputs, audio_only: false, extension, width: w, height: h })
+    Ok(EncodePlan { encoder, pre_input, encode: enc, video_inputs, audio_inputs: audio.inputs, audio_only: false, extension, width: w, height: h })
 }
 
 /// Options of the Audio Recorder (no video).
@@ -235,7 +253,7 @@ pub fn plan_audio(opts: &AudioRecordingOptions) -> Result<EncodePlan> {
         a.separate_tracks = false;
     }
     let audio = crate::audio::plan(&a, 0, &codec_refs, true);
-    Ok(EncodePlan { encoder: codec[1].clone(), pre_input: vec![], encode: audio.output, audio_inputs: audio.inputs, audio_only: true, extension: ext, width: 0, height: 0 })
+    Ok(EncodePlan { encoder: codec[1].clone(), pre_input: vec![], encode: audio.output, video_inputs: vec![], audio_inputs: audio.inputs, audio_only: true, extension: ext, width: 0, height: 0 })
 }
 
 /// `dir/stem.ext`, or `dir/stem (2).ext` … when the name is taken.
@@ -276,6 +294,7 @@ mod tests {
             countdown: 3,
             max_minutes: 0,
             audio: Default::default(),
+            webcam: Default::default(),
         }
     }
 

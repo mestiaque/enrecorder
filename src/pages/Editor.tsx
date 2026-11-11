@@ -31,6 +31,8 @@ export function EditorPage() {
   const [now, setNow] = useState(0);
   const [volume, setVolume] = useState(100);
   const [mute, setMute] = useState(false);
+  const [denoise, setDenoise] = useState(false);
+  const [normalize, setNormalize] = useState(false);
   const [format, setFormat] = useState<ExportPreset["format"]>("mp4");
 
   useEffect(() => {
@@ -70,6 +72,8 @@ export function EditorPage() {
         endMs: full ? null : Math.round(range[1]),
         removeAudio: mute,
         volume: mute ? 100 : volume,
+        denoise: !mute && denoise,
+        normalize: !mute && normalize,
       });
       toast({ kind: "success", title: "Export started", detail: `${fmt(range[1] - range[0])} from “${item.title}”`, action: { label: "Export Center", run: () => useNav.getState().go("exports") } });
     } catch (e) {
@@ -145,6 +149,16 @@ export function EditorPage() {
                 <div className="w-40">
                   <Slider value={volume} min={0} max={300} step={5} onChange={setVolume} />
                 </div>
+              </Row>
+            )}
+            {!mute && (
+              <Row label="Reduce noise" hint="Hum, fans, hiss">
+                <Switch checked={denoise} onChange={setDenoise} label="Reduce noise" />
+              </Row>
+            )}
+            {!mute && (
+              <Row label="Normalize loudness" hint="−16 LUFS, the level of podcasts and online video">
+                <Switch checked={normalize} onChange={setNormalize} label="Normalize loudness" />
               </Row>
             )}
             <Row label="Format">

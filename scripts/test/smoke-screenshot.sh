@@ -14,7 +14,7 @@ export DISPLAY=:99 XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=ubuntu:GNOME
 sleep 1
 # Something recognisable on the screen behind the app.
 # (drawn on the root window: a player window would take the keyboard focus)
-ffmpeg -hide_banner -loglevel error -f lavfi -i "testsrc2=size=1440x900" -frames:v 1 -y /tmp/pattern.png
+ffmpeg -hide_banner -loglevel error -f lavfi -i "color=white:size=1440x900" -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='Quarterly report 2026':fontsize=64:x=40:y=60" -frames:v 1 -y /tmp/pattern.png
 display -window root /tmp/pattern.png >/dev/null 2>&1 &
 dbus-run-session -- "$BIN" >"$OUT/app.log" 2>&1 &
 APP=$!
@@ -30,6 +30,7 @@ xdotool key r; xdotool mousemove 500 300 mousedown 1 mousemove 600 380 mousemove
 xdotool key b; xdotool mousemove 800 300 mousedown 1 mousemove 900 380 mousemove 1000 450 mouseup 1; sleep 0.5
 xdotool key n; xdotool mousemove 450 600 click 1; sleep 0.5
 import -window root "$OUT/3-annotated.png"
+if [ -n "${TEXT_X:-}" ]; then xdotool mousemove "$TEXT_X" "$TEXT_Y" click 1; sleep 4; import -window root "$OUT/3b-ocr.png"; xdotool key Escape; sleep 1; fi
 xdotool key ctrl+s; sleep 3
 import -window root "$OUT/4-saved.png"
 echo "--- files ---"; ls -la /tmp/home/Pictures/ENRecorder /tmp/home/Pictures/ENRecorder/.enrecorder-originals 2>&1

@@ -45,9 +45,9 @@ fn main() {
     let mic = devices.iter().find(|d| d.kind == AudioKind::Microphone && d.default).or(devices.iter().find(|d| d.kind == AudioKind::Microphone)).map(|d| d.id.clone());
     let sys = devices.iter().find(|d| d.kind == AudioKind::System && d.default).map(|d| d.id.clone());
     for (format, separate) in [("mp3", false), ("m4a", true)] {
-        let opts = AudioRecordingOptions { audio: AudioOptions { microphone: mic.clone(), system: sys.clone(), separate_tracks: separate, mic_volume: 100, system_volume: 100 }, format: format.into(), quality: "balanced".into(), countdown: 0, max_minutes: 0 };
+        let opts = AudioRecordingOptions { audio: AudioOptions { microphone: mic.clone(), system: sys.clone(), separate_tracks: separate, mic_volume: 100, system_volume: 100, mic_denoise: false, mic_normalize: false }, format: format.into(), quality: "balanced".into(), countdown: 0, max_minutes: 0 };
         let plan = plan_audio(&opts).expect("plan");
-        let rec = RecordingOptions { source: enrec_core::capture::CaptureSource::Desktop { width: 0, height: 0 }, fps: 30, resolution: "native".into(), format: format.into(), codec: Codec::H264, encoder: plan.encoder.clone(), quality: "balanced".into(), show_cursor: false, countdown: 0, max_minutes: 0, audio: opts.audio.clone() };
+        let rec = RecordingOptions { source: enrec_core::capture::CaptureSource::Desktop { width: 0, height: 0 }, fps: 30, resolution: "native".into(), format: format.into(), codec: Codec::H264, encoder: plan.encoder.clone(), quality: "balanced".into(), show_cursor: false, countdown: 0, max_minutes: 0, audio: opts.audio.clone(), webcam: Default::default() };
         let db = Arc::new(Db::open_in_memory().unwrap());
         let mut h = session::start(StartParams { db, ffmpeg: PathBuf::from(&ff.path), ffprobe: fp.clone(), input: CaptureInput { args: vec![], width: 0, height: 0, frames: None }, plan, options: rec, output_dir: out.clone(), file_stem: format!("audio-{format}"), min_free_bytes: 0 }, Arc::new(Quiet)).expect("start");
         while h.snapshot().state != RecState::Recording {

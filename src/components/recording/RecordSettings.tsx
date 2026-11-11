@@ -1,7 +1,7 @@
 import { FolderOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import { api, errorMessage } from "../../lib/api";
-import { useAudioDevices, usePaths, useTools } from "../../lib/queries";
+import { useAudioDevices, useCameras, usePaths, useTools } from "../../lib/queries";
 import { AudioSourceSelect } from "./AudioSourceSelect";
 import type { Codec, EncoderStatus, Settings } from "../../lib/types";
 import { useSettings } from "../../store/settings";
@@ -36,6 +36,7 @@ export function RecordSettings({ backend }: { backend: string | null | undefined
   const { data: tools } = useTools();
   const { data: paths } = usePaths();
   const { data: devices } = useAudioDevices();
+  const { data: cameras } = useCameras();
   const encoders = tools?.capabilities?.encoders;
   const usable = verifiedFor(encoders, s.recCodec);
   const auto = usable[0];
@@ -101,6 +102,36 @@ export function RecordSettings({ backend }: { backend: string | null | undefined
         <Line label="Separate audio tracks" hint="Keep voice and system sound apart for editing; off mixes them into one track">
           <Switch checked={s.recSeparateTracks} onChange={(v) => void set("recSeparateTracks", v)} label="Separate audio tracks" />
         </Line>
+      )}
+      {s.recMic && (
+        <Line label="Clean up the microphone" hint="Remove background noise and even out the volume">
+          <div className="flex items-center gap-3 text-[12px]">
+            <label className="flex items-center gap-1.5">
+              <Switch checked={s.recMicDenoise} onChange={(v) => void set("recMicDenoise", v)} label="Reduce noise" />
+              Noise
+            </label>
+            <label className="flex items-center gap-1.5">
+              <Switch checked={s.recMicNormalize} onChange={(v) => void set("recMicNormalize", v)} label="Even out volume" />
+              Level
+            </label>
+          </div>
+        </Line>
+      )}
+      <Line label="Webcam" hint={cameras && !cameras.length ? "No camera found" : "Your camera in a corner of the recording"}>
+        <Select value={s.recWebcam} onChange={(v) => void set("recWebcam", v)} className="max-w-[240px]" options={[{ value: "", label: "Off" }, ...(cameras ?? []).map((c) => ({ value: c.id, label: c.name })), ...(s.recWebcam && !(cameras ?? []).some((c) => c.id === s.recWebcam) ? [{ value: s.recWebcam, label: "Disconnected camera" }] : [])]} />
+      </Line>
+      {s.recWebcam && (
+        <>
+          <Line label="Webcam position">
+            <Select value={s.recWebcamPosition} onChange={(v) => void set("recWebcamPosition", v)} options={[{ value: "bottom-right", label: "Bottom right" }, { value: "bottom-left", label: "Bottom left" }, { value: "top-right", label: "Top right" }, { value: "top-left", label: "Top left" }]} />
+          </Line>
+          <Line label="Webcam size and shape">
+            <div className="flex gap-2">
+              <Select value={s.recWebcamSize} onChange={(v) => void set("recWebcamSize", v)} options={[15, 22, 30, 40].map((n) => ({ value: n, label: `${n}%` }))} />
+              <Segmented value={s.recWebcamShape} onChange={(v) => void set("recWebcamShape", v)} options={[{ value: "circle", label: "Circle" }, { value: "rectangle", label: "Rectangle" }]} />
+            </div>
+          </Line>
+        </>
       )}
       <Line label="Show the mouse pointer">
         <Switch checked={s.recCursor} onChange={(v) => void set("recCursor", v)} label="Show the mouse pointer" />

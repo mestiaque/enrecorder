@@ -60,3 +60,5 @@ export const useAudioDevices = () => useQuery({ queryKey: ["audio-devices"], que
 
 /** Where the preview player streams a recording from (local preview server). */
 export const useMediaUrl = (id: string | null) => useQuery({ queryKey: ["media-url", id], queryFn: () => api.mediaUrl(id!), enabled: !!id, staleTime: Infinity });
+
+export const useCameras = () => useQuery({ queryKey: ["cameras"], queryFn: api.listCameras, staleTime: 10_000 });

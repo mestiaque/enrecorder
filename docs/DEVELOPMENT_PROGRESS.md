@@ -204,3 +204,28 @@ PipeWire, then Windows.Graphics.Capture), FFmpeg recording pipeline, recording H
   detail panel with waveform thumbnail and a playing preview → Export… → MP3 job completed in the
   Export Center → added to the library → Media Editor shows it.
 * clippy `-D warnings` (core, app), `pnpm typecheck`, `pnpm test` (14): clean.
+
+## Phase 6 — Advanced (2026-11-11)
+
+**Implemented**
+* `webcam`: camera list (sysfs index-0 nodes on Linux, DirectShow on Windows), v4l2/dshow inputs,
+  overlay graph (corner, size, circle mask with `geq`), placed before the pixel format / GPU upload;
+  the recording plan uses a second `-filter_complex` for video when the webcam is on and shifts the
+  audio input numbers.
+* Audio processing: microphone `highpass` + `afftdn` and `dynaudnorm` in the recording plan;
+  `afftdn` / `loudnorm` (−16 LUFS) in exports.
+* OCR: `screenshot::ocr` (Tesseract discovery incl. Windows install folders, installed languages,
+  recognition, tidy output); `ocr_status`, `ocr_screenshot`, `copy_text`; "Text" in the editor.
+* UI: webcam and microphone clean-up under Recording settings, clean-up switches in the Audio
+  Recorder and the Media Editor, OCR dialog with copy.
+
+**Tests executed**
+* `cargo test -p enrec-core`: 72 passed — new: webcam device parsing and overlay graphs; a real
+  recording with a test-pattern "camera" (circle overlay) + denoised/normalised microphone across a
+  pause; exports with denoise + loudnorm; Tesseract reading text drawn by FFmpeg.
+* `scripts/test/smoke-screenshot.sh` with OCR: the editor's Text button read "Quarterly report
+  2026" from the captured screen.
+* clippy `-D warnings` (core with examples, app), `pnpm typecheck`: clean.
+
+**Not built (documented):** cursor effects and keystroke overlay (global input hooks: not
+available on Wayland and privacy-sensitive), transcription (needs a local speech model).

@@ -104,6 +104,16 @@ pub async fn list_audio_devices(app: AppHandle) -> Result<Vec<enrec_core::audio:
     .await
 }
 
+/// Cameras for the webcam overlay.
+#[tauri::command]
+pub async fn list_cameras(app: AppHandle) -> Result<Vec<enrec_core::webcam::Camera>> {
+    blocking(move || {
+        let ffmpeg = app.state::<AppState>().tools.read().ffmpeg.clone().map(|t| PathBuf::from(t.path));
+        enrec_core::webcam::list_cameras(ffmpeg.as_deref())
+    })
+    .await
+}
+
 /// "Audio 2026-11-11 10-02-33".
 fn audio_stem() -> String {
     file_stem().replacen("Recording", "Audio", 1)
@@ -136,6 +146,7 @@ pub async fn start_audio_recording(app: AppHandle, options: enrec_core::recordin
             countdown: options.countdown.min(10),
             max_minutes: options.max_minutes,
             audio: options.audio.clone(),
+            webcam: Default::default(),
         };
         let observer = Arc::new(UiObserver { app: app.clone(), last_progress: Mutex::new(Instant::now() - Duration::from_secs(1)) });
         let handle = session::start(

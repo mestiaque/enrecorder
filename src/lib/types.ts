@@ -22,6 +22,12 @@ export interface Settings {
   recMic: string;
   recSystemAudio: string;
   recSeparateTracks: boolean;
+  recMicDenoise: boolean;
+  recMicNormalize: boolean;
+  recWebcam: string;
+  recWebcamPosition: "bottom-right" | "bottom-left" | "top-right" | "top-left";
+  recWebcamSize: number;
+  recWebcamShape: "circle" | "rectangle";
   audioMic: string;
   audioSystem: string;
   audioFormat: AudioFormat;
@@ -217,6 +223,7 @@ export interface RecordingOptions {
   countdown: number;
   maxMinutes: number;
   audio?: AudioOptions;
+  webcam?: WebcamOptions;
 }
 
 export type AudioFormat = "mp3" | "m4a" | "opus" | "flac" | "wav";
@@ -234,6 +241,20 @@ export interface AudioOptions {
   separateTracks: boolean;
   micVolume: number;
   systemVolume: number;
+  micDenoise?: boolean;
+  micNormalize?: boolean;
+}
+
+export interface WebcamOptions {
+  device: string | null;
+  position: Settings["recWebcamPosition"];
+  size: number;
+  shape: Settings["recWebcamShape"];
+}
+
+export interface Camera {
+  id: string;
+  name: string;
 }
 
 export interface AudioRecordingOptions {
@@ -284,6 +305,8 @@ export interface ExportPreset {
   maxHeight?: number;
   removeAudio?: boolean;
   volume?: number;
+  denoise?: boolean;
+  normalize?: boolean;
 }
 
 export interface ExportUpdate {

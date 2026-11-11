@@ -51,6 +51,14 @@ pub struct Settings {
     pub rec_system_audio: String,
     /// Microphone and system audio on separate tracks instead of one mix.
     pub rec_separate_tracks: bool,
+    /// Microphone clean-up in recordings (phase 6).
+    pub rec_mic_denoise: bool,
+    pub rec_mic_normalize: bool,
+    /// Webcam overlay: device ("" = off), corner, size (% of width), shape.
+    pub rec_webcam: String,
+    pub rec_webcam_position: String,
+    pub rec_webcam_size: u32,
+    pub rec_webcam_shape: String,
     /// Audio Recorder: devices ("" = off), format and quality.
     pub audio_mic: String,
     pub audio_system: String,
@@ -88,6 +96,12 @@ impl Default for Settings {
             rec_mic: String::new(),
             rec_system_audio: String::new(),
             rec_separate_tracks: false,
+            rec_mic_denoise: false,
+            rec_mic_normalize: false,
+            rec_webcam: String::new(),
+            rec_webcam_position: "bottom-right".into(),
+            rec_webcam_size: 22,
+            rec_webcam_shape: "circle".into(),
             audio_mic: "default".into(),
             audio_system: String::new(),
             audio_format: "mp3".into(),
@@ -154,7 +168,14 @@ impl Settings {
             self.rec_countdown = d.rec_countdown;
         }
         self.rec_max_minutes = self.rec_max_minutes.min(24 * 60);
-        for dev in [&mut self.rec_mic, &mut self.rec_system_audio, &mut self.audio_mic, &mut self.audio_system] {
+        if !matches!(self.rec_webcam_position.as_str(), "bottom-right" | "bottom-left" | "top-right" | "top-left") {
+            self.rec_webcam_position = d.rec_webcam_position.clone();
+        }
+        if !matches!(self.rec_webcam_shape.as_str(), "circle" | "rectangle") {
+            self.rec_webcam_shape = d.rec_webcam_shape.clone();
+        }
+        self.rec_webcam_size = self.rec_webcam_size.clamp(10, 40);
+        for dev in [&mut self.rec_mic, &mut self.rec_system_audio, &mut self.audio_mic, &mut self.audio_system, &mut self.rec_webcam] {
             if dev.len() > 300 || dev.chars().any(|c| c.is_control()) {
                 dev.clear();
             }

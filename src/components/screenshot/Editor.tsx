@@ -1,4 +1,5 @@
-import { ArrowUpRight, Check, Circle, Copy, Crop, Eraser, Hash, Highlighter, Minus, MousePointer2, Pencil, Redo2, Save, Square, Trash2, Type, Undo2, X } from "lucide-react";
+import { ArrowUpRight, Check, Circle, Copy, Crop, Eraser, Hash, Highlighter, Minus, MousePointer2, Pencil, Redo2, Save, ScanText, Square, Trash2, Type, Undo2, X } from "lucide-react";
+import { Dialog } from "../ui/overlays";
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { cn } from "../../lib/format";
@@ -39,6 +40,7 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
   const [textAt, setTextAt] = useState<{ x: number; y: number; sx: number; sy: number } | null>(null);
   const [format, setFormat] = useState<Screenshot["format"]>(shot.format);
   const [busy, setBusy] = useState(false);
+  const [ocr, setOcr] = useState<{ text: string; busy: boolean } | null>(null);
   const drag = useRef<{ x: number; y: number; id: string } | null>(null);
 
   useEffect(() => {
@@ -220,6 +222,22 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
     }
   }
 
+  /** Text in the current image (crop applied, blurred areas stay unreadable), via Tesseract. */
+  async function readText() {
+    const png = flattened();
+    if (!png) return;
+    setOcr({ text: "", busy: true });
+    try {
+      const st = await api.ocrStatus();
+      const langs = ["eng", "ben"].filter((l) => st.languages.includes(l)).join("+") || "eng";
+      const text = await api.ocrScreenshot(png, langs);
+      setOcr({ text: text || "(no text found)", busy: false });
+    } catch (e) {
+      setOcr(null);
+      toast({ kind: "error", title: "Could not read the text", detail: errorMessage(e) }, 8000);
+    }
+  }
+
   async function copy() {
     const png = flattened();
     if (!png) return;
@@ -272,6 +290,10 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
         <Button size="sm" variant="ghost" onClick={() => commit(emptyDoc())} disabled={!doc.items.length && !doc.crop}>
           Reset
         </Button>
+        <Button size="sm" variant="ghost" onClick={() => void readText()} disabled={!img} title="Read the text in the image (OCR, on this computer)">
+          <ScanText className="h-3.5 w-3.5" />
+          Text
+        </Button>
         <Select value={format} onChange={(v) => setFormat(v)} options={[{ value: "png", label: "PNG" }, { value: "jpeg", label: "JPEG" }, { value: "webp", label: "WebP" }]} />
         <Button size="sm" onClick={() => void copy()} disabled={!img}>
           <Copy className="h-3.5 w-3.5" />
@@ -311,6 +333,25 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
           )}
         </div>
       </div>
+      {ocr && (
+        <Dialog
+          open
+          onOpenChange={(o) => !o && setOcr(null)}
+          title="Text in the screenshot"
+          description="Recognised on this computer with Tesseract. Check it before using it."
+          footer={
+            <>
+              <Button onClick={() => setOcr(null)}>Close</Button>
+              <Button variant="primary" disabled={ocr.busy || !ocr.text} onClick={() => void api.copyText(ocr.text).then(() => toast({ kind: "success", title: "Text copied" }), () => toast({ kind: "error", title: "Could not copy" }))}>
+                <Copy className="h-3.5 w-3.5" />
+                Copy text
+              </Button>
+            </>
+          }
+        >
+          {ocr.busy ? <div className="py-6 text-center text-[13px] text-muted">Reading…</div> : <textarea readOnly value={ocr.text} className="h-64 w-full resize-none rounded-md border border-line bg-bg p-2 font-mono text-[12px] outline-none" />}
+        </Dialog>
+      )}
       <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-panel px-3 text-[11px] text-muted">
         <span>{img ? `${img.naturalWidth}×${img.naturalHeight}` : "…"}</span>
         {doc.crop && <span>Crop {Math.round(doc.crop.w)}×{Math.round(doc.crop.h)}</span>}

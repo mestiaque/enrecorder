@@ -34,11 +34,15 @@ pub struct ExportPreset {
     pub remove_audio: bool,
     /// Audio volume in percent (100 = unchanged).
     pub volume: u32,
+    /// Remove rumble and steady background noise (phase 6).
+    pub denoise: bool,
+    /// Loudness normalisation to −16 LUFS (podcast/online level).
+    pub normalize: bool,
 }
 
 impl Default for ExportPreset {
     fn default() -> Self {
-        Self { kind: "convert".into(), format: "mp4".into(), quality: "balanced".into(), start_ms: None, end_ms: None, max_height: 0, remove_audio: false, volume: 100 }
+        Self { kind: "convert".into(), format: "mp4".into(), quality: "balanced".into(), start_ms: None, end_ms: None, max_height: 0, remove_audio: false, volume: 100, denoise: false, normalize: false }
     }
 }
 
@@ -88,8 +92,14 @@ pub fn build_args(p: &ExportPreset, src: &Path, dst: &Path, source_ms: Option<u6
     let scale = if p.max_height > 0 { format!("scale=-2:'min({},ih)'", p.max_height) } else { s("scale=trunc(iw/2)*2:trunc(ih/2)*2") };
     let vol = (p.volume != 100).then(|| format!("volume={:.2}", p.volume.min(400) as f64 / 100.0));
     let mut af: Vec<String> = Vec::new();
+    if p.denoise {
+        af.push(s("highpass=f=80,afftdn=nr=12:nf=-30:tn=1"));
+    }
     if let Some(v) = &vol {
         af.push(v.clone());
+    }
+    if p.normalize {
+        af.push(s("loudnorm=I=-16:TP=-1.5:LRA=11"));
     }
     match p.format.as_str() {
         "gif" => {
@@ -394,8 +404,9 @@ mod tests {
         assert!(build_args(&ExportPreset { format: "avi".into(), ..Default::default() }, src, dst, None, true).is_err());
         let gif = build_args(&ExportPreset { kind: "gif".into(), format: "gif".into(), ..Default::default() }, src, dst, Some(1000), true).unwrap().0;
         assert!(gif.iter().any(|x| x.contains("palettegen")));
-        let mp3 = build_args(&ExportPreset { kind: "audio".into(), format: "mp3".into(), volume: 150, ..Default::default() }, src, dst, Some(1000), false).unwrap().0;
-        assert!(mp3.contains(&"-vn".to_string()) && mp3.contains(&"volume=1.50".to_string()));
+        let mp3 = build_args(&ExportPreset { kind: "audio".into(), format: "mp3".into(), volume: 150, denoise: true, normalize: true, ..Default::default() }, src, dst, Some(1000), false).unwrap().0;
+        let af = &mp3[mp3.iter().position(|x| x == "-af").unwrap() + 1];
+        assert!(mp3.contains(&"-vn".to_string()) && af.starts_with("highpass") && af.contains("volume=1.50") && af.ends_with("LRA=11"), "{af}");
     }
 
     struct Chan(Mutex<mpsc::Sender<ExportUpdate>>);
@@ -437,7 +448,7 @@ mod tests {
         let out = dir.path().join("Exports");
         let trim = m.enqueue(None, &src, &out, "clip (trim)", ExportPreset { kind: "trim".into(), start_ms: Some(1000), end_ms: Some(3000), ..Default::default() }, Some(4000), true).unwrap();
         let gif = m.enqueue(None, &src, &out, "clip", ExportPreset { kind: "gif".into(), format: "gif".into(), max_height: 120, ..Default::default() }, Some(4000), true).unwrap();
-        let mp3 = m.enqueue(None, &src, &out, "clip", ExportPreset { kind: "audio".into(), format: "mp3".into(), ..Default::default() }, Some(4000), true).unwrap();
+        let mp3 = m.enqueue(None, &src, &out, "clip", ExportPreset { kind: "audio".into(), format: "mp3".into(), denoise: true, normalize: true, ..Default::default() }, Some(4000), true).unwrap();
         for id in [&trim, &gif, &mp3] {
             let u = wait_done(&rx, id);
             assert_eq!(u.status, "completed", "{:?}", u.error);

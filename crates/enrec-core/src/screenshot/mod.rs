@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+pub mod ocr;
+
 pub const FORMATS: &[&str] = &["png", "jpeg", "webp"];
 
 /// Folder for the untouched captures (annotations are re-applied to these).

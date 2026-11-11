@@ -13,5 +13,6 @@ pub mod screenshot;
 pub mod settings;
 pub mod storage;
 pub mod system;
+pub mod webcam;
 
 pub use error::{AppError, Result};

@@ -46,6 +46,22 @@ pub struct AudioOptions {
     pub mic_volume: u32,
     /// System audio volume in percent (0–200).
     pub system_volume: u32,
+    /// Microphone clean-up (phase 6): remove rumble and steady background noise.
+    pub mic_denoise: bool,
+    /// Microphone: even out loud and quiet speech (real-time dynamic normalisation).
+    pub mic_normalize: bool,
+}
+
+/// Filters in front of the microphone: high-pass + FFT denoiser, then dynamic normalisation.
+pub fn mic_chain(denoise: bool, normalize: bool) -> String {
+    let mut f = Vec::new();
+    if denoise {
+        f.push("highpass=f=80,afftdn=nr=12:nf=-30:tn=1");
+    }
+    if normalize {
+        f.push("dynaudnorm=f=150:g=15:p=0.9");
+    }
+    f.join(",")
 }
 
 impl AudioOptions {
@@ -154,6 +170,9 @@ pub struct AudioPlan {
 
 pub fn plan(opts: &AudioOptions, first_index: usize, codec_args: &[&str], meter: bool) -> AudioPlan {
     let mut sources: Vec<(&str, u32)> = Vec::new();
+    let mic_extra = mic_chain(opts.mic_denoise, opts.mic_normalize);
+    let mic_extra = if mic_extra.is_empty() { String::new() } else { format!(",{mic_extra}") };
+    let has_mic = opts.microphone.is_some();
     if let Some(m) = &opts.microphone {
         sources.push((m.as_str(), if opts.mic_volume == 0 && opts.system_volume == 0 { 100 } else { opts.mic_volume }));
     }
@@ -173,14 +192,15 @@ pub fn plan(opts: &AudioOptions, first_index: usize, codec_args: &[&str], meter:
     let mut graph = Vec::new();
     if sources.len() == 2 && !opts.separate_tracks {
         let (a, b) = (first_index, first_index + 1);
-        graph.push(format!("[{a}:a]{}[m0];[{b}:a]{}[m1];[m0][m1]amix=inputs=2:duration=longest:normalize=0,aresample=async=1{meter_f}[aout]", volume(sources[0].1), volume(sources[1].1)));
+        graph.push(format!("[{a}:a]{}{mic_extra}[m0];[{b}:a]{}[m1];[m0][m1]amix=inputs=2:duration=longest:normalize=0,aresample=async=1{meter_f}[aout]", volume(sources[0].1), volume(sources[1].1)));
         p.output.extend([s("-filter_complex"), graph.join(";"), s("-map"), s("[aout]")]);
         p.tracks = 1;
     } else {
         for (i, (_, vol)) in sources.iter().enumerate() {
             let idx = first_index + i;
             let m = if i == 0 { meter_f.as_str() } else { "" };
-            graph.push(format!("[{idx}:a]{},aresample=async=1{m}[a{i}]", volume(*vol)));
+            let extra = if i == 0 && has_mic { mic_extra.as_str() } else { "" };
+            graph.push(format!("[{idx}:a]{}{extra},aresample=async=1{m}[a{i}]", volume(*vol)));
         }
         p.output.extend([s("-filter_complex"), graph.join(";")]);
         for i in 0..sources.len() {
@@ -265,11 +285,12 @@ mod tests {
 
     #[test]
     fn plans() {
-        let both = AudioOptions { microphone: Some("mic".into()), system: Some("mon".into()), separate_tracks: false, mic_volume: 100, system_volume: 80 };
+        let both = AudioOptions { microphone: Some("mic".into()), system: Some("mon".into()), separate_tracks: false, mic_volume: 100, system_volume: 80, mic_denoise: true, mic_normalize: false };
         let p = plan(&both, 1, codec_for("mp4"), false);
         assert_eq!(p.tracks, 1);
         let fc = &p.output[p.output.iter().position(|a| a == "-filter_complex").unwrap() + 1];
-        assert!(fc.contains("[1:a]volume=1.00") && fc.contains("[2:a]volume=0.80") && fc.contains("amix=inputs=2"), "{fc}");
+        assert!(fc.contains("[1:a]volume=1.00,highpass") && fc.contains("afftdn") && fc.contains("[2:a]volume=0.80[m1]") && fc.contains("amix=inputs=2"), "{fc}");
+        assert!(!fc.contains("dynaudnorm"));
         assert!(p.output.ends_with(&["-c:a".to_string(), "aac".into(), "-b:a".into(), "160k".into()]));
         let sep = plan(&AudioOptions { separate_tracks: true, ..both.clone() }, 1, codec_for("webm"), false);
         assert_eq!(sep.tracks, 2);

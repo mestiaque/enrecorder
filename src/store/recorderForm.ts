@@ -64,7 +64,8 @@ export async function startRecording(): Promise<boolean> {
   try {
     const s = useSettings.getState().settings;
     const opts = optionsFrom(s, source);
-    if (s.recMic || s.recSystemAudio) opts.audio = audioFrom(s.recMic, s.recSystemAudio, s.recSeparateTracks, await devices());
+    if (s.recMic || s.recSystemAudio) opts.audio = { ...audioFrom(s.recMic, s.recSystemAudio, s.recSeparateTracks, await devices()), micDenoise: s.recMicDenoise, micNormalize: s.recMicNormalize };
+    if (s.recWebcam) opts.webcam = { device: s.recWebcam, position: s.recWebcamPosition, size: s.recWebcamSize, shape: s.recWebcamShape };
     await api.startRecording(opts);
     return true;
   } catch (e) {

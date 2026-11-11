@@ -57,7 +57,7 @@ export function AudioRecorderPage() {
   const start = async () => {
     try {
       const list = devices.data ?? (await api.listAudioDevices());
-      await api.startAudioRecording({ audio: audioFrom(s.audioMic, s.audioSystem, s.recSeparateTracks, list), format: s.audioFormat, quality: s.audioQuality, countdown: 0, maxMinutes: s.recMaxMinutes });
+      await api.startAudioRecording({ audio: { ...audioFrom(s.audioMic, s.audioSystem, s.recSeparateTracks, list), micDenoise: s.recMicDenoise, micNormalize: s.recMicNormalize }, format: s.audioFormat, quality: s.audioQuality, countdown: 0, maxMinutes: s.recMaxMinutes });
     } catch (e) {
       toast({ kind: "error", title: "Could not start recording", detail: errorMessage(e) }, 10000);
     }
@@ -98,6 +98,16 @@ export function AudioRecorderPage() {
               <Row label="System audio" hint={devices.data && !devices.data.some((d) => d.kind === "system") ? "No loopback device found" : "Sound playing on this computer"}>
                 <AudioSourceSelect value={s.audioSystem} kind="system" devices={devices.data} onChange={(v) => void set("audioSystem", v)} />
               </Row>
+              {s.audioMic && (
+                <Row label="Reduce background noise" hint="Removes hum, fans and steady hiss from the microphone">
+                  <Switch checked={s.recMicDenoise} onChange={(v) => void set("recMicDenoise", v)} label="Reduce background noise" />
+                </Row>
+              )}
+              {s.audioMic && (
+                <Row label="Even out the volume" hint="Quiet and loud speech end up at a similar level">
+                  <Switch checked={s.recMicNormalize} onChange={(v) => void set("recMicNormalize", v)} label="Even out the volume" />
+                </Row>
+              )}
               {both && (
                 <Row label="Separate tracks" hint="Voice and system sound as two tracks (formats with one track mix them)">
                   <Switch checked={s.recSeparateTracks} onChange={(v) => void set("recSeparateTracks", v)} label="Separate tracks" />

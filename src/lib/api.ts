@@ -1,6 +1,6 @@
 /** Typed wrappers around the Rust commands: one function per command. */
 import { invoke } from "@tauri-apps/api/core";
-import type { AboutInfo, AudioDevice, AudioRecordingOptions, ExportPreset, MediaDetail, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
+import type { AboutInfo, AudioDevice, Camera, AudioRecordingOptions, ExportPreset, MediaDetail, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
 
 export const api = {
   getSettings: () => invoke<SettingsPayload>("get_settings"),
@@ -18,6 +18,10 @@ export const api = {
   recordingStatus: () => invoke<RecordingSnapshot | null>("recording_status"),
   startRecording: (options: RecordingOptions) => invoke<RecordingSnapshot>("start_video_recording", { options }),
   listAudioDevices: () => invoke<AudioDevice[]>("list_audio_devices"),
+  listCameras: () => invoke<Camera[]>("list_cameras"),
+  ocrStatus: () => invoke<{ available: boolean; languages: string[] }>("ocr_status"),
+  copyText: (text: string) => invoke<void>("copy_text", { text }),
+  ocrScreenshot: (png: string, languages: string) => invoke<string>("ocr_screenshot", { png, languages }),
   takeScreenshot: (source: CaptureSource | null, delay: number, hideWindow: boolean, cursor: boolean) => invoke<Screenshot>("take_screenshot", { source, delay, hideWindow, cursor }),
   screenshotImage: (id: string) => invoke<string>("screenshot_image", { id }),
   saveScreenshot: (id: string, png: string, format: string, quality: number, annotations: string | null) => invoke<Screenshot>("save_screenshot", { id, png, format, quality, annotations }),

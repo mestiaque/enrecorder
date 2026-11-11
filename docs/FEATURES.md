@@ -80,9 +80,20 @@ strength of mocked tests alone.
 | Export queue: convert (MP4/WebM/MKV), compress (smaller CRF + size), audio only (MP3/M4A/WAV/FLAC/Opus), GIF (palette), trim; one job at a time, progress, cancel, persisted, interrupted jobs marked failed on start, results verified and added to the library | Done | |
 | Media Editor: preview, start/end (sliders or "at the current position"), play selection, volume, remove sound, output format, non-destructive export | Done | split/crop/multi-clip timeline: later |
 
+## Advanced (phase 6)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Webcam overlay in screen recordings: camera list (Linux sysfs / v4l2, Windows DirectShow), corner, size 15–40 %, circle or rectangle; overlaid before the GPU upload so hardware encoders still work | Done | real camera not available in CI; tested with a test pattern as the camera |
+| Microphone clean-up while recording: high-pass + FFT denoiser, real-time dynamic normalisation (Video and Audio Recorder) | Done | |
+| Export clean-up: denoise and loudness normalisation to −16 LUFS (Media Editor) | Done | |
+| OCR: "Text" in the screenshot editor reads the current image (crop applied, blurred parts unreadable) with Tesseract, copy to the clipboard | Done | needs `tesseract-ocr` (Ubuntu) or the UB Mannheim build (Windows); English and Bengali used when installed |
+| Cursor effects, keystroke overlay, transcription | Not built | see Planned |
+
 ## Planned
 
 | Area | Phase |
 |---|---|
-| Webcam overlay, cursor effects, keystroke overlay, audio processing, OCR, optional transcription | 6 |
+| Cursor effects (click highlights), keystroke overlay | later — need a global input hook (not allowed on Wayland, privacy-sensitive) |
+| Transcription | later — needs a local speech model (whisper.cpp) |
 | Recovery (MKV finalisation), performance, security review, installers (Windows NSIS/portable, AppImage), FFmpeg bundling for Windows | 7 |

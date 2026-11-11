@@ -149,3 +149,43 @@ pub fn copy_screenshot(app: AppHandle, png: String) -> Result<()> {
 pub async fn get_screenshot(app: AppHandle, id: String) -> Result<Screenshot> {
     blocking(move || app.state::<AppState>().db.screenshot(&id)).await
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrStatus {
+    available: bool,
+    languages: Vec<String>,
+}
+
+/// Is Tesseract installed, and with which languages.
+#[tauri::command]
+pub async fn ocr_status() -> Result<OcrStatus> {
+    blocking(|| {
+        Ok(match screenshot::ocr::find_tesseract() {
+            Some(t) => OcrStatus { available: true, languages: screenshot::ocr::languages(&t) },
+            None => OcrStatus { available: false, languages: vec![] },
+        })
+    })
+    .await
+}
+
+/// Text in the editor's current image (PNG) — all on this computer.
+#[tauri::command]
+pub async fn ocr_screenshot(app: AppHandle, png: String, languages: String) -> Result<String> {
+    blocking(move || {
+        let tess = screenshot::ocr::find_tesseract().ok_or_else(|| AppError::Unsupported(if cfg!(windows) { "Install Tesseract OCR (UB Mannheim build) to read text from images".into() } else { "Install Tesseract to read text from images: sudo apt install tesseract-ocr".into() }))?;
+        let bytes = decode(&png)?;
+        let tmp = app.state::<AppState>().data_dir.join(format!("ocr-{}.png", enrec_core::database::new_id()));
+        std::fs::write(&tmp, &bytes)?;
+        let r = screenshot::ocr::recognize(&tess, &tmp, &languages);
+        let _ = std::fs::remove_file(&tmp);
+        r
+    })
+    .await
+}
+
+/// Copies text (OCR result) to the clipboard.
+#[tauri::command]
+pub fn copy_text(app: AppHandle, text: String) -> Result<()> {
+    app.clipboard().write_text(text).map_err(tauri_err)
+}
