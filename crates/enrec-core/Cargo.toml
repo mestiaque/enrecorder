@@ -1,0 +1,22 @@
+[package]
+name = "enrec-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ENRecorder core: database, settings, FFmpeg service, system detection, storage, capture interfaces"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
+parking_lot = "0.12"
+# Bundled SQLite: the same library on every platform, no system package needed.
+rusqlite = { version = "0.32", features = ["bundled"] }
+# UUID primary keys (brief §13).
+uuid = { version = "1", features = ["v4"] }
+# Free/total space of the volume that holds the recordings (one small, maintained crate).
+fs4 = { version = "0.13", features = ["sync"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,48 @@
+# ENRecorder
+
+**One studio. Every capture.** Screen recording, audio recording and screenshots for Windows
+10/11 and Ubuntu 22.04/24.04 (X11 and Wayland), with a media library, a simple editor and an
+export queue. Local-first: no account, no cloud upload, no watermark, no telemetry.
+
+ENRecorder is part of the EN* family (ENViewer, ENPlayer, ENSave, ENStream, ENiShare, ENPost)
+and uses the same look, themes (Dark, Light, Glass, System) and settings layout.
+
+> **Status: phase 1 of 7 (foundation).** The application shell, dashboard, library database,
+> settings, FFmpeg detection and verified encoder detection work. **Recording does not work
+> yet** — the capture engines arrive in phases 2–4. See [FEATURES.md](docs/FEATURES.md) and
+> [DEVELOPMENT_PROGRESS.md](docs/DEVELOPMENT_PROGRESS.md).
+
+## What works today
+
+* Home dashboard: recent recordings and screenshots, statistics, storage use, free disk space
+  and a system readiness check (display server, audio server, FFmpeg, FFprobe, encoders, disk).
+* Video Recorder page: detected display server and capture method, connected monitors, and the
+  video encoders **verified by a real test encode** on this computer.
+* Recordings library and Export Center (read side; they fill up once capture and export exist).
+* Settings: start with the system, start minimized, close to tray, save folders (checked before
+  saving), a specific FFmpeg, theme, accent colour, animations, logs and diagnostics, About.
+* Tray icon, single instance, keyboard shortcuts (Ctrl+1…7 pages, Ctrl+B sidebar, Ctrl+, settings).
+
+## Install (Ubuntu)
+
+```bash
+sudo apt install ./ENRecorder_0.1.0_amd64.deb   # pulls in ffmpeg
+```
+
+Build instructions: [docs/BUILD.md](docs/BUILD.md).
+
+## Documentation
+
+| File | Contents |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | processes, services, capture abstraction, data model |
+| [docs/FEATURES.md](docs/FEATURES.md) | every feature with its real status |
+| [docs/API.md](docs/API.md) | Tauri commands and events with their types |
+| [docs/BUILD.md](docs/BUILD.md) | Ubuntu and Windows build instructions, dependencies |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | common problems |
+| [docs/DEVELOPMENT_PROGRESS.md](docs/DEVELOPMENT_PROGRESS.md) | milestone reports |
+
+## Licence
+
+© 2026 M. Estiaque Ahmed Khan · MIT. FFmpeg is a separate program under its own licence
+(LGPL/GPL); on Ubuntu it is the distribution package.
