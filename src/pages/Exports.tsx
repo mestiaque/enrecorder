@@ -1,4 +1,5 @@
-import { CircleSlash, FolderOpen, ListVideo } from "lucide-react";
+import { CircleSlash, FolderOpen, ListVideo, RotateCcw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { EmptyState, PageHeader, Panel } from "../components/ui/blocks";
 import { Button, ProgressBar } from "../components/ui/primitives";
 import { api, errorMessage } from "../lib/api";
@@ -17,6 +18,7 @@ const STATUS: Record<string, string> = {
 };
 
 export function ExportsPage() {
+  const qc = useQueryClient();
   const jobs = useExportJobs();
   const list = jobs.data ?? [];
   const active = list.filter((j) => ["queued", "initializing", "running", "finalizing"].includes(j.status)).length;
@@ -49,6 +51,20 @@ export function ExportsPage() {
                 ) : j.status === "completed" ? (
                   <Button size="sm" variant="ghost" onClick={() => void api.revealPath(j.outputPath).catch((e) => toast({ kind: "error", title: "Could not show the file", detail: errorMessage(e) }))} title="Show in folder">
                     <FolderOpen className="h-3.5 w-3.5" />
+                  </Button>
+                ) : j.status === "failed" || j.status === "cancelled" ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title="Run this export again"
+                    onClick={() =>
+                      void api
+                        .retryExport(j.id)
+                        .then(() => void qc.invalidateQueries({ queryKey: ["exports"] }))
+                        .catch((e) => toast({ kind: "error", title: "Could not retry", detail: errorMessage(e) }))
+                    }
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
                   </Button>
                 ) : (
                   <span className="w-8" />

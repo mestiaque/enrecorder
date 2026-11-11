@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
-import { AppWindow, Crop, Monitor, MonitorSmartphone, RefreshCw, Search } from "lucide-react";
+import { AppWindow, Camera, Crop, Monitor, MonitorSmartphone, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage, EVENTS } from "../../lib/api";
+import { useCameras } from "../../lib/queries";
 import { cn } from "../../lib/format";
 import type { CaptureSource } from "../../lib/types";
 import { useRecorderForm } from "../../store/recorderForm";
@@ -10,9 +11,9 @@ import { toast } from "../../store/ui";
 import { EmptyState, Panel, Pending } from "../ui/blocks";
 import { Button, IconButton, Segmented } from "../ui/primitives";
 
-type Tab = "screen" | "window" | "region";
+type Tab = "screen" | "window" | "region" | "camera";
 
-export const sourceKey = (s: CaptureSource) => (s.type === "monitor" || s.type === "window" ? `${s.type}:${s.id}` : s.type);
+export const sourceKey = (s: CaptureSource) => (s.type === "monitor" || s.type === "window" || s.type === "camera" ? `${s.type}:${s.id}` : s.type);
 
 export function sourceLabel(s: CaptureSource): string {
   switch (s.type) {
@@ -26,6 +27,8 @@ export function sourceLabel(s: CaptureSource): string {
       return `Area ${s.width}×${s.height} at ${s.x}, ${s.y}`;
     case "portal":
       return "Screen or window chosen in the sharing dialog";
+    case "camera":
+      return `Webcam only · ${s.name}`;
   }
 }
 
@@ -47,7 +50,8 @@ function Choice({ active, icon, title, sub, onClick }: { active: boolean; icon: 
 
 export function SourcePicker() {
   const { source, setSource } = useRecorderForm();
-  const [tab, setTab] = useState<Tab>(source?.type === "window" ? "window" : source?.type === "region" ? "region" : "screen");
+  const [tab, setTab] = useState<Tab>(source?.type === "window" ? "window" : source?.type === "region" ? "region" : source?.type === "camera" ? "camera" : "screen");
+  const cameras = useCameras();
   const [filter, setFilter] = useState("");
   const q = useQuery({ queryKey: ["capture-sources"], queryFn: api.listCaptureSources, staleTime: 5000 });
   const sources = q.data?.sources ?? [];
@@ -61,7 +65,7 @@ export function SourcePicker() {
   // Default: the primary monitor (or the desktop); on Wayland the sharing dialog.
   useEffect(() => {
     if (portal) {
-      if (source?.type !== "portal") setSource(portal);
+      if (source?.type !== "portal" && source?.type !== "camera") setSource(portal);
       return;
     }
     if (source || !screens.length) return;
@@ -100,6 +104,9 @@ export function SourcePicker() {
         <div className="space-y-2">
           <Choice active icon={<MonitorSmartphone className="h-4 w-4" />} title="Choose in the sharing dialog" sub="Wayland: your desktop asks which screen or window to share when you press Start" onClick={() => setSource(portal)} />
           <div className="text-[11px] text-faint">ENRecorder never sees the screen without your choice in that dialog. Cancelling it cancels the recording.</div>
+          {(cameras.data ?? []).map((c) => (
+            <Choice key={c.id} active={source?.type === "camera" && source.id === c.id} icon={<Camera className="h-4 w-4" />} title={`Webcam only: ${c.name}`} sub="The camera picture is the whole recording" onClick={() => setSource({ type: "camera", id: c.id, name: c.name })} />
+          ))}
         </div>
       ) : (
         <>
@@ -110,6 +117,7 @@ export function SourcePicker() {
               { value: "screen", label: <><Monitor className="h-3.5 w-3.5" />Screen</> },
               { value: "window", label: <><AppWindow className="h-3.5 w-3.5" />Window</> },
               { value: "region", label: <><Crop className="h-3.5 w-3.5" />Area</> },
+              { value: "camera", label: <><Camera className="h-3.5 w-3.5" />Webcam</> },
             ]}
           />
           <div className="mt-3 space-y-2">
@@ -144,6 +152,14 @@ export function SourcePicker() {
                 </div>
                 {q.data?.backend === "x11" && <div className="text-[11px] text-faint">On X11 a window is recorded as it appears on screen: anything covering it is recorded too, and it keeps the size it had when recording started.</div>}
               </>
+            )}
+            {tab === "camera" && (
+              <div className="space-y-2">
+                {(cameras.data ?? []).length === 0 && <div className="py-4 text-center text-[12px] text-faint">{cameras.isLoading ? "Looking for cameras…" : "No camera found"}</div>}
+                {(cameras.data ?? []).map((c) => (
+                  <Choice key={c.id} active={source?.type === "camera" && source.id === c.id} icon={<Camera className="h-4 w-4" />} title={c.name} sub="The camera picture is the whole recording" onClick={() => setSource({ type: "camera", id: c.id, name: c.name })} />
+                ))}
+              </div>
             )}
             {tab === "region" && (
               <div className="space-y-2">

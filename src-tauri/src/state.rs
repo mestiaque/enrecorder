@@ -38,6 +38,18 @@ pub struct AppState {
     pub system_pictures: PathBuf,
     /// Export queue (convert, compress, audio, GIF, trim).
     pub exports: Arc<enrec_core::export::ExportManager>,
+    /// A recording waiting for its start time (one at a time).
+    pub schedule: Mutex<Option<Scheduled>>,
+    /// Registered global shortcuts: shortcut id → action.
+    pub shortcut_actions: Mutex<std::collections::HashMap<u32, String>>,
+    /// The transcription that is running: media id and its cancel flag (one at a time).
+    pub transcribing: Mutex<Option<(String, Arc<AtomicBool>)>>,
+}
+
+pub struct Scheduled {
+    pub at_ms: i64,
+    pub label: String,
+    pub cancel: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -53,6 +65,11 @@ impl AppState {
     /// Library thumbnails.
     pub fn thumbs_dir(&self) -> PathBuf {
         self.data_dir.join("thumbnails")
+    }
+
+    /// Pointer/key tracks of recordings (`<id>.json`), kept out of the media folders.
+    pub fn tracks_dir(&self) -> PathBuf {
+        self.data_dir.join("tracks")
     }
 
     /// Audio Recorder files: an "Audio" folder inside the recordings folder.

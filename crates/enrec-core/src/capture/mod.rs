@@ -39,6 +39,8 @@ pub enum CaptureSource {
     /// Wayland: the desktop's sharing dialog lets the user pick a screen or window when the
     /// recording starts; nothing can be captured without that choice.
     Portal,
+    /// A camera only (no screen): the webcam picture is the whole recording.
+    Camera { id: String, name: String },
 }
 
 impl CaptureSource {
@@ -49,6 +51,7 @@ impl CaptureSource {
             CaptureSource::Window { .. } => "window",
             CaptureSource::Region { .. } => "region",
             CaptureSource::Portal => "portal",
+            CaptureSource::Camera { .. } => "camera",
         }
     }
 }
@@ -85,6 +88,12 @@ pub trait CaptureBackend: Send + Sync {
     fn list_sources(&self) -> Result<Vec<CaptureSource>>;
     /// The FFmpeg input for `req`; checks the source still exists.
     fn input(&self, req: &CaptureRequest) -> Result<CaptureInput>;
+}
+
+/// FFmpeg input for a camera-only recording. The camera's own size is kept (the size given
+/// here is only a planning value; the encode plan crops to even sizes without scaling).
+pub fn camera_input(id: &str, fps: u32) -> CaptureInput {
+    CaptureInput { args: crate::webcam::input_args(id, fps), width: 1280, height: 720, frames: None, origin: None }
 }
 
 /// Largest even number ≤ `v` (H.264/HEVC 4:2:0 need even sizes), at least 2.

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppWindow, Camera, Crop, FolderOpen, Image as ImageIcon, Monitor, Pencil } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScreenshotEditor } from "../components/screenshot/Editor";
 import type { Tool } from "../components/screenshot/annotate";
 import { EmptyState, PageHeader, Panel, Row } from "../components/ui/blocks";
@@ -10,6 +10,7 @@ import { formatBytes } from "../lib/format";
 import { useMedia, usePaths } from "../lib/queries";
 import type { CaptureSource, Screenshot } from "../lib/types";
 import { toast } from "../store/ui";
+import { useShotRequest } from "../store/schedule";
 
 type Mode = "screen" | "monitor" | "window" | "area";
 
@@ -64,6 +65,17 @@ export function ScreenshotPage() {
       setBusy(false);
     }
   };
+
+  // Screenshot shortcut (Settings → Shortcuts): take one as soon as the sources are known.
+  const request = useShotRequest((st) => st.n);
+  const [handled, setHandled] = useState(request);
+  useEffect(() => {
+    if (request !== handled && !busy && (sources.data || portal)) {
+      setHandled(request);
+      void capture();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request, sources.data]);
 
   const open = async (id: string) => {
     try {

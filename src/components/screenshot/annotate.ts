@@ -20,22 +20,60 @@ export interface Rect {
   h: number;
 }
 
+/** Finishing touches applied to the whole image on export (after annotations and crop). */
+export interface Finish {
+  /** Clockwise rotation. */
+  rotate: 0 | 90 | 180 | 270;
+  /** Resize in percent (100 = unchanged). */
+  scale: number;
+  /** A frame around the image (0 = none). */
+  border: number;
+  borderColor: string;
+  /** A soft drop shadow on a transparent margin (PNG/WebP keep the transparency). */
+  shadow: boolean;
+}
+
 export interface Doc {
   version: 1;
   items: Item[];
   crop: Rect | null;
+  finish: Finish;
 }
 
-export const emptyDoc = (): Doc => ({ version: 1, items: [], crop: null });
+export const defaultFinish = (): Finish => ({ rotate: 0, scale: 100, border: 0, borderColor: "#ffffff", shadow: false });
+export const emptyDoc = (): Doc => ({ version: 1, items: [], crop: null, finish: defaultFinish() });
 
 export function parseDoc(json: string | null | undefined): Doc {
   if (!json) return emptyDoc();
   try {
     const d = JSON.parse(json) as Partial<Doc>;
-    return { version: 1, items: Array.isArray(d.items) ? d.items : [], crop: d.crop ?? null };
+    const f = { ...defaultFinish(), ...(d.finish ?? {}) };
+    if (![0, 90, 180, 270].includes(f.rotate)) f.rotate = 0;
+    f.scale = Math.min(400, Math.max(10, Number(f.scale) || 100));
+    f.border = Math.min(200, Math.max(0, Number(f.border) || 0));
+    return { version: 1, items: Array.isArray(d.items) ? d.items : [], crop: d.crop ?? null, finish: f };
   } catch {
     return emptyDoc();
   }
+}
+
+/** Moves an item one step up (+1) or down (-1) in the drawing order. */
+export function reorder(items: Item[], id: string, dir: 1 | -1): Item[] {
+  const i = items.findIndex((x) => x.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= items.length) return items;
+  const out = [...items];
+  [out[i], out[j]] = [out[j], out[i]];
+  return out;
+}
+
+/** Size of the finished image (crop → rotate → scale → border/shadow margin). */
+export function finishedSize(w: number, h: number, f: Finish): { w: number; h: number; pad: number } {
+  const [rw, rh] = f.rotate === 90 || f.rotate === 270 ? [h, w] : [w, h];
+  const sw = Math.max(1, Math.round((rw * f.scale) / 100));
+  const sh = Math.max(1, Math.round((rh * f.scale) / 100));
+  const pad = f.shadow ? Math.round(Math.max(sw, sh) * 0.04) + 8 : 0;
+  return { w: sw + 2 * f.border + 2 * pad, h: sh + 2 * f.border + 2 * pad, pad };
 }
 
 export function norm(x1: number, y1: number, x2: number, y2: number): Rect {
@@ -193,11 +231,36 @@ export function renderExport(img: HTMLImageElement, doc: Doc): HTMLCanvasElement
   const ctx = full.getContext("2d")!;
   ctx.drawImage(img, 0, 0);
   for (const it of doc.items) drawItem(ctx, img, it);
-  const c = doc.crop && doc.crop.w > 4 && doc.crop.h > 4 ? doc.crop : null;
-  if (!c) return full;
+  const c = doc.crop && doc.crop.w > 4 && doc.crop.h > 4 ? doc.crop : { x: 0, y: 0, w: full.width, h: full.height };
+  const f = doc.finish ?? defaultFinish();
+  const size = finishedSize(Math.round(c.w), Math.round(c.h), f);
   const out = document.createElement("canvas");
-  out.width = Math.round(c.w);
-  out.height = Math.round(c.h);
-  out.getContext("2d")!.drawImage(full, c.x, c.y, c.w, c.h, 0, 0, c.w, c.h);
+  out.width = size.w;
+  out.height = size.h;
+  const o = out.getContext("2d")!;
+  const inner = { w: size.w - 2 * size.pad, h: size.h - 2 * size.pad };
+  if (f.shadow) {
+    o.save();
+    o.shadowColor = "rgba(0,0,0,0.45)";
+    o.shadowBlur = size.pad;
+    o.shadowOffsetY = size.pad / 3;
+    o.fillStyle = f.border ? f.borderColor : "#000";
+    o.fillRect(size.pad, size.pad, inner.w, inner.h);
+    o.restore();
+  }
+  if (f.border) {
+    o.fillStyle = f.borderColor;
+    o.fillRect(size.pad, size.pad, inner.w, inner.h);
+  }
+  // The picture, rotated and scaled into the frame.
+  const pw = inner.w - 2 * f.border;
+  const ph = inner.h - 2 * f.border;
+  o.save();
+  o.translate(size.pad + f.border + pw / 2, size.pad + f.border + ph / 2);
+  o.rotate((f.rotate * Math.PI) / 180);
+  const [dw, dh] = f.rotate === 90 || f.rotate === 270 ? [ph, pw] : [pw, ph];
+  o.imageSmoothingQuality = "high";
+  o.drawImage(full, c.x, c.y, c.w, c.h, -dw / 2, -dh / 2, dw, dh);
+  o.restore();
   return out;
 }

@@ -1,6 +1,7 @@
 import { FolderOpen, Mic, RefreshCw } from "lucide-react";
 import { AudioSourceSelect } from "../components/recording/AudioSourceSelect";
 import { LivePanel } from "../components/recording/LivePanel";
+import { MicExtras } from "../components/recording/MicExtras";
 import { PageHeader, Panel, Pending, Row, StatusIcon } from "../components/ui/blocks";
 import { Button, Segmented, Select, Switch } from "../components/ui/primitives";
 import { api, errorMessage } from "../lib/api";
@@ -15,6 +16,7 @@ const FORMATS: { value: AudioFormat; label: string; hint: string }[] = [
   { value: "mp3", label: "MP3", hint: "Plays everywhere" },
   { value: "m4a", label: "M4A (AAC)", hint: "Small, good quality" },
   { value: "opus", label: "Opus", hint: "Best for speech, smallest" },
+  { value: "ogg", label: "OGG (Vorbis)", hint: "Open format, plays in most apps" },
   { value: "flac", label: "FLAC", hint: "Lossless, compressed" },
   { value: "wav", label: "WAV", hint: "Lossless, uncompressed" },
 ];
@@ -57,7 +59,7 @@ export function AudioRecorderPage() {
   const start = async () => {
     try {
       const list = devices.data ?? (await api.listAudioDevices());
-      await api.startAudioRecording({ audio: { ...audioFrom(s.audioMic, s.audioSystem, s.recSeparateTracks, list), micDenoise: s.recMicDenoise, micNormalize: s.recMicNormalize }, format: s.audioFormat, quality: s.audioQuality, countdown: 0, maxMinutes: s.recMaxMinutes });
+      await api.startAudioRecording({ audio: audioFrom(s.audioMic, s.audioSystem, s.recSeparateTracks, list, s), format: s.audioFormat, quality: s.audioQuality, countdown: 0, maxMinutes: s.recMaxMinutes });
     } catch (e) {
       toast({ kind: "error", title: "Could not start recording", detail: errorMessage(e) }, 10000);
     }
@@ -108,6 +110,7 @@ export function AudioRecorderPage() {
                   <Switch checked={s.recMicNormalize} onChange={(v) => void set("recMicNormalize", v)} label="Even out the volume" />
                 </Row>
               )}
+              <MicExtras mic={!!s.audioMic} system={!!s.audioSystem} />
               {both && (
                 <Row label="Separate tracks" hint="Voice and system sound as two tracks (formats with one track mix them)">
                   <Switch checked={s.recSeparateTracks} onChange={(v) => void set("recSeparateTracks", v)} label="Separate tracks" />
@@ -134,6 +137,12 @@ export function AudioRecorderPage() {
                 <Segmented value={s.audioQuality} onChange={(v) => void set("audioQuality", v as Settings["audioQuality"])} options={[{ value: "small", label: "Smaller" }, { value: "balanced", label: "Balanced" }, { value: "high", label: "High" }]} />
               </Row>
             )}
+            <Row label="Sample rate">
+              <Select value={s.audioSampleRate} onChange={(v) => void set("audioSampleRate", v)} options={[{ value: 44100 as const, label: "44.1 kHz" }, { value: 48000 as const, label: "48 kHz" }, { value: 96000 as const, label: "96 kHz" }]} />
+            </Row>
+            <Row label="Channels">
+              <Segmented value={String(s.audioChannels)} onChange={(v) => void set("audioChannels", Number(v) as 1 | 2)} options={[{ value: "1", label: "Mono" }, { value: "2", label: "Stereo" }]} />
+            </Row>
             <Row label="Save to" hint={<span className="font-mono">{paths ? `${paths.recordings}/Audio` : "…"}</span>}>
               <Button size="sm" variant="ghost" disabled={!paths} onClick={() => paths && api.openFolder(paths.recordings).catch((e) => toast({ kind: "error", title: "Could not open the folder", detail: errorMessage(e) }))}>
                 <FolderOpen className="h-3.5 w-3.5" />
@@ -145,3 +154,4 @@ export function AudioRecorderPage() {
     </>
   );
 }
+

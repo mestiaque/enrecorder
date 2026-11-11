@@ -28,6 +28,8 @@ pub enum AppError {
     Io(String),
     #[error("{0}")]
     Other(String),
+    #[error("Cancelled")]
+    Cancelled,
 }
 
 impl AppError {
@@ -43,6 +45,7 @@ impl AppError {
             AppError::NotFound(_) => "notFound",
             AppError::Db(_) => "db",
             AppError::Io(_) => "io",
+            AppError::Cancelled => "cancelled",
             AppError::Other(_) => "other",
         }
     }

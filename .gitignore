@@ -4,7 +4,7 @@ target/
 src-tauri/gen/
 *.log
 .DS_Store
-release/
+/release/
 .vscode/
 .pnpm-store/
 src-tauri/binaries/

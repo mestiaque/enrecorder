@@ -1,6 +1,6 @@
 /** Typed wrappers around the Rust commands: one function per command. */
 import { invoke } from "@tauri-apps/api/core";
-import type { AboutInfo, AudioDevice, Camera, Interrupted, AudioRecordingOptions, ExportPreset, MediaDetail, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
+import type { AboutInfo, AudioDevice, Camera, Interrupted, AudioRecordingOptions, ExportPreset, MediaDetail, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo, Tag, ShortcutRow, DeviceRow, ScheduleInfo } from "./types";
 
 export const api = {
   getSettings: () => invoke<SettingsPayload>("get_settings"),
@@ -60,7 +60,39 @@ export const api = {
   openLogFolder: () => invoke<void>("open_log_folder"),
   quitApp: () => invoke<void>("quit_app"),
   hideToTray: () => invoke<void>("hide_to_tray"),
+
+  scheduleRecording: (options: RecordingOptions, atMs: number, label: string) => invoke<ScheduleInfo>("schedule_recording", { options, atMs, label }),
+  scheduleStatus: () => invoke<ScheduleInfo | null>("schedule_status"),
+  cancelSchedule: () => invoke<void>("cancel_schedule"),
+  deviceManager: () => invoke<DeviceRow[]>("device_manager"),
+  deleteMediaMany: (ids: string[]) => invoke<number>("delete_media_many", { ids }),
+  listTags: () => invoke<Tag[]>("list_tags"),
+  createTag: (name: string, color: string | null = null) => invoke<Tag>("create_tag", { name, color }),
+  deleteTag: (id: string) => invoke<void>("delete_tag", { id }),
+  setMediaTags: (ids: string[], tagIds: string[]) => invoke<void>("set_media_tags", { ids, tagIds }),
+  mediaTagIds: (id: string) => invoke<string[]>("media_tag_ids", { id }),
+  checkLibraryFiles: () => invoke<[number, number]>("check_library_files"),
+  reprocessMedia: (id: string) => invoke<MediaItem>("reprocess_media", { id }),
+  mediaTrack: (id: string) => invoke<{ clicks: boolean; keys: boolean } | null>("media_track", { id }),
+  extractFrame: (id: string, atMs: number) => invoke<string>("extract_frame", { id, atMs }),
+  estimateExport: (id: string, preset: ExportPreset) => invoke<number | null>("estimate_export", { id, preset }),
+  retryExport: (id: string) => invoke<string>("retry_export", { id }),
+  detectSilence: (id: string) => invoke<[number, number | null][]>("detect_silence", { id }),
+  getShortcuts: () => invoke<ShortcutRow[]>("get_shortcuts"),
+  setShortcut: (action: string, accelerator: string | null) => invoke<ShortcutRow[]>("set_shortcut", { action, accelerator }),
+  resetShortcuts: () => invoke<ShortcutRow[]>("reset_shortcuts"),
+  transcriptionStatus: () => invoke<TranscriptionStatus>("transcription_status"),
+  transcribeMedia: (id: string) => invoke<string>("transcribe_media", { id }),
+  cancelTranscription: () => invoke<void>("cancel_transcription"),
 };
+
+/** whisper.cpp (optional): program and models found, and the running job. */
+export interface TranscriptionStatus {
+  program: string | null;
+  models: string[];
+  modelFolder: string;
+  running: string | null;
+}
 
 /** Event names emitted by the backend. */
 export interface UpdateInfo {
@@ -82,6 +114,9 @@ export const EVENTS = {
   startRequest: "recording-start-request",
   confirmQuit: "confirm-quit",
   exportProgress: "export-progress",
+  scheduleChanged: "schedule-changed",
+  screenshotRequest: "screenshot-request",
+  transcribeProgress: "transcribe-progress",
 } as const;
 
 /** Commands reject with `{ kind, message }` (AppError) or a plain string. */

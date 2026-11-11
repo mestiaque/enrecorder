@@ -23,6 +23,7 @@ import { PAGE_IDS, useNav, type PageId } from "./store/nav";
 import { useSettings } from "./store/settings";
 import { startRecording } from "./store/recorderForm";
 import { useRecording } from "./store/recording";
+import { useSchedule, useShotRequest } from "./store/schedule";
 import { confirmDialog, useUi } from "./store/ui";
 
 function hexToRgb(hex: string): string {
@@ -109,6 +110,13 @@ export default function App() {
     window.addEventListener("contextmenu", onContext);
     let offRec: (() => void) | undefined;
     void useRecording.getState().init().then((f) => (offRec = f));
+    let offSchedule: (() => void) | undefined;
+    void useSchedule.getState().init().then((f) => (offSchedule = f));
+    // Screenshot shortcut: open the Screenshot Studio and take one with its current mode.
+    const unShot = listen(EVENTS.screenshotRequest, () => {
+      useNav.getState().go("screenshot");
+      useShotRequest.setState((s) => ({ n: s.n + 1 }));
+    });
     // Ctrl+Shift+R / tray → start with the current form.
     const unStart = listen(EVENTS.startRequest, () => void startRecording());
     // Quit while recording: ask first; quitting stops and saves the recording.
@@ -119,6 +127,8 @@ export default function App() {
     return () => {
       window.removeEventListener("contextmenu", onContext);
       offRec?.();
+      offSchedule?.();
+      void unShot.then((f) => f());
       void unStart.then((f) => f());
       void unQuit.then((f) => f());
     };

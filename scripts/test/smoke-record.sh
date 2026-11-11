@@ -28,9 +28,9 @@ sleep 1.2; import -window root "$OUT/2-countdown.png"
 sleep 4; import -window root "$OUT/3-recording.png"
 # Floating controls sit at the top centre: pause/resume, then stop.
 HUD_Y=111
-xdotool mousemove 802 $HUD_Y click 1; sleep 2; import -window root "$OUT/4-paused.png"
-xdotool mousemove 802 $HUD_Y click 1; sleep 2.5
-xdotool mousemove 843 $HUD_Y click 1; sleep 6
+xdotool mousemove 822 $HUD_Y click 1; sleep 2; import -window root "$OUT/4-paused.png"
+xdotool mousemove 822 $HUD_Y click 1; sleep 2.5
+xdotool mousemove 863 $HUD_Y click 1; sleep 6
 import -window root "$OUT/5-done.png"
 # Global shortcut check: start again with Ctrl+Shift+R, stop with Ctrl+Shift+R.
 xdotool key ctrl+shift+r; sleep 6; xdotool key ctrl+shift+r; sleep 5

@@ -63,6 +63,9 @@ pub struct Settings {
     pub rec_webcam_position: String,
     pub rec_webcam_size: u32,
     pub rec_webcam_shape: String,
+    /// Webcam frame colour ("" = none) and shadow.
+    pub rec_webcam_border: String,
+    pub rec_webcam_shadow: bool,
     /// Audio Recorder: devices ("" = off), format and quality.
     pub audio_mic: String,
     pub audio_system: String,
@@ -99,8 +102,15 @@ pub struct Settings {
     // Privacy
     /// Delete log files older than this many days (0 = keep).
     pub log_retention_days: u32,
-    /// Desktop notification when a recording, screenshot or export is saved.
+    /// Desktop notification when a recording, export or transcript is saved (or a recording fails).
     pub notify_on_save: bool,
+    // Transcription (optional, whisper.cpp)
+    /// whisper.cpp program (`whisper-cli`); empty = look in the usual places.
+    pub whisper_path: String,
+    /// Speech model (`ggml-*.bin`); empty = the smallest one found.
+    pub whisper_model: String,
+    /// Spoken language code ("en", "bn", …) or "auto".
+    pub transcribe_language: String,
     // Appearance
     /// "dark" | "light" | "glass" | "system"
     pub theme: String,
@@ -141,6 +151,8 @@ impl Default for Settings {
             rec_webcam_position: "bottom-right".into(),
             rec_webcam_size: 22,
             rec_webcam_shape: "circle".into(),
+            rec_webcam_border: String::new(),
+            rec_webcam_shadow: false,
             audio_mic: "default".into(),
             audio_system: String::new(),
             audio_format: "mp3".into(),
@@ -161,6 +173,9 @@ impl Default for Settings {
             thumbnails: true,
             log_retention_days: 14,
             notify_on_save: true,
+            whisper_path: String::new(),
+            whisper_model: String::new(),
+            transcribe_language: "auto".into(),
             theme: "dark".into(),
             accent: "#6366f1".into(),
             animations: true,
@@ -226,7 +241,10 @@ impl Settings {
         if !matches!(self.rec_webcam_position.as_str(), "bottom-right" | "bottom-left" | "top-right" | "top-left") {
             self.rec_webcam_position = d.rec_webcam_position.clone();
         }
-        if !matches!(self.rec_webcam_shape.as_str(), "circle" | "rectangle") {
+        if !(self.rec_webcam_border.is_empty() || (self.rec_webcam_border.len() == 7 && self.rec_webcam_border.starts_with('#') && self.rec_webcam_border[1..].chars().all(|c| c.is_ascii_hexdigit()))) {
+            self.rec_webcam_border.clear();
+        }
+        if !matches!(self.rec_webcam_shape.as_str(), "circle" | "rectangle" | "rounded") {
             self.rec_webcam_shape = d.rec_webcam_shape.clone();
         }
         self.rec_webcam_size = self.rec_webcam_size.clamp(10, 40);
@@ -264,7 +282,9 @@ impl Settings {
         if !matches!(self.language.as_str(), "en") {
             self.language = d.language;
         }
-        for dir in [&mut self.recordings_dir, &mut self.screenshots_dir, &mut self.ffmpeg_path] {
+        let lang = self.transcribe_language.trim().to_ascii_lowercase();
+        self.transcribe_language = if lang == "auto" || (2..=3).contains(&lang.len()) && lang.chars().all(|c| c.is_ascii_lowercase()) { lang } else { d.transcribe_language.clone() };
+        for dir in [&mut self.recordings_dir, &mut self.screenshots_dir, &mut self.ffmpeg_path, &mut self.whisper_path, &mut self.whisper_model] {
             *dir = dir.trim().to_string();
             if !dir.is_empty() && !Path::new(dir.as_str()).is_absolute() {
                 dir.clear();

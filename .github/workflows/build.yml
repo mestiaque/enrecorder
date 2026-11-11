@@ -91,6 +91,7 @@ jobs:
           exit 1
       - name: FFmpeg for the Windows installer
         if: runner.os == 'Windows'
+        shell: bash
         run: ./scripts/release/fetch-ffmpeg-windows.sh
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4

@@ -201,6 +201,51 @@ impl Db {
     }
 }
 
+/// A device as remembered in `devices` (also ones that are unplugged now).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceRow {
+    pub kind: String,
+    pub backend_id: String,
+    pub name: String,
+    pub is_default: bool,
+    pub connected: bool,
+    pub details: serde_json::Value,
+    pub last_seen: i64,
+}
+
+impl Db {
+    /// Records the devices of `kinds` seen now: present ones are updated and marked connected,
+    /// known ones that are missing are marked disconnected.
+    pub fn sync_devices(&self, kinds: &[&str], present: &[(String, String, String, bool, serde_json::Value)]) -> Result<()> {
+        let mut c = self.conn.lock();
+        let tx = c.transaction()?;
+        let now = now_ms();
+        for k in kinds {
+            tx.execute("UPDATE devices SET connected = 0 WHERE kind = ?1", params![k])?;
+        }
+        for (kind, id, name, default, details) in present {
+            tx.execute(
+                "INSERT INTO devices(id, kind, backend_id, name, is_default, connected, details, last_seen) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7)
+                 ON CONFLICT(kind, backend_id) DO UPDATE SET name = excluded.name, is_default = excluded.is_default, connected = 1, details = excluded.details, last_seen = excluded.last_seen",
+                params![new_id(), kind, id, name, default, details.to_string(), now],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn list_devices(&self) -> Result<Vec<DeviceRow>> {
+        let c = self.conn.lock();
+        let mut st = c.prepare("SELECT kind, backend_id, name, is_default, connected, details, last_seen FROM devices ORDER BY kind, connected DESC, is_default DESC, name COLLATE NOCASE")?;
+        let rows = st.query_map([], |r| {
+            let details: String = r.get(5)?;
+            Ok(DeviceRow { kind: r.get(0)?, backend_id: r.get(1)?, name: r.get(2)?, is_default: r.get(3)?, connected: r.get(4)?, details: serde_json::from_str(&details).unwrap_or_default(), last_seen: r.get(6)? })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tag {
@@ -244,6 +289,12 @@ mod tag_tests {
         assert_eq!(d.list_tags().unwrap()[0].count, 1);
         assert_eq!(d.refresh_missing().unwrap(), (1, 0));
         assert_eq!(d.media_item("r2").unwrap().status, "missing");
+        let mic = |id: &str| ("microphone".to_string(), id.to_string(), format!("Mic {id}"), id == "a", serde_json::json!({"channels": 2}));
+        d.sync_devices(&["microphone"], &[mic("a"), mic("b")]).unwrap();
+        d.sync_devices(&["microphone"], &[mic("a")]).unwrap();
+        let devs = d.list_devices().unwrap();
+        assert_eq!(devs.len(), 2);
+        assert!(devs[0].connected && devs[0].is_default && !devs[1].connected, "an unplugged device is remembered, not removed");
         d.delete_tag(&work.id).unwrap();
         assert!(d.media_tag_ids("r1").unwrap().is_empty(), "tag links go with the tag");
     }

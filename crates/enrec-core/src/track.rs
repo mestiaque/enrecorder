@@ -101,7 +101,7 @@ pub fn combo(newly: &[String], held: &[String]) -> Option<String> {
     Some(parts.join("+"))
 }
 
-/// Samples the input ~20 times a second on its own thread and records events in recorded time.
+/// Samples the input about 60 times a second on its own thread and records events in recorded time.
 pub struct Tracker {
     stop: Arc<AtomicBool>,
     paused: Arc<AtomicBool>,
@@ -128,8 +128,9 @@ impl Tracker {
                 let mut prev = InputState::default();
                 let mut last_pos = (i32::MIN, i32::MIN);
                 let mut errors = 0;
+                // 16 ms: a quick click is held for ~40–100 ms, so polling this often sees it.
                 while !st.load(Ordering::Acquire) {
-                    std::thread::sleep(Duration::from_millis(50));
+                    std::thread::sleep(Duration::from_millis(16));
                     let now = Instant::now();
                     if pa.load(Ordering::Acquire) {
                         last = now;

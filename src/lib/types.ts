@@ -29,11 +29,32 @@ export interface Settings {
   recWebcam: string;
   recWebcamPosition: "bottom-right" | "bottom-left" | "top-right" | "top-left";
   recWebcamSize: number;
-  recWebcamShape: "circle" | "rectangle";
+  recWebcamShape: "circle" | "rectangle" | "rounded";
+  recWebcamBorder: string;
+  recWebcamShadow: boolean;
   audioMic: string;
   audioSystem: string;
   audioFormat: AudioFormat;
   audioQuality: "high" | "balanced" | "small";
+  recMicGate: boolean;
+  recEchoCancel: boolean;
+  recMicVolume: number;
+  recSystemVolume: number;
+  audioSampleRate: 44100 | 48000 | 96000;
+  audioChannels: 1 | 2;
+  recSplitMinutes: 0 | 5 | 10 | 15 | 30 | 60;
+  recTrackClicks: boolean;
+  recTrackKeys: boolean;
+  shotFormat: "png" | "jpeg" | "webp";
+  shotQuality: number;
+  shotNameTemplate: string;
+  hwAccel: boolean;
+  thumbnails: boolean;
+  logRetentionDays: number;
+  notifyOnSave: boolean;
+  whisperPath: string;
+  whisperModel: string;
+  transcribeLanguage: string;
   theme: "dark" | "light" | "glass" | "system";
   accent: string;
   animations: boolean;
@@ -106,6 +127,14 @@ export interface MediaItem {
   status: string;
   favorite: boolean;
   createdAt: number;
+  tags: string[];
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string | null;
+  count: number;
 }
 
 export interface LibraryStats {
@@ -146,6 +175,11 @@ export interface LibraryQuery {
   search: string;
   sort: "newest" | "oldest" | "name" | "size" | "duration";
   limit?: number;
+  date?: "" | "today" | "week" | "month";
+  length?: "" | "short" | "medium" | "long";
+  size?: "" | "small" | "medium" | "large";
+  resolution?: "" | "uhd" | "fhd" | "hd" | "sd";
+  tag?: string;
 }
 
 export interface ExportJob {
@@ -179,7 +213,8 @@ export type CaptureSource =
   | { type: "monitor"; id: string; name: string; width: number; height: number; x: number; y: number; primary: boolean }
   | { type: "window"; id: string; title: string; app: string; width: number; height: number }
   | { type: "region"; x: number; y: number; width: number; height: number }
-  | { type: "portal" };
+  | { type: "portal" }
+  | { type: "camera"; id: string; name: string };
 
 export interface SourcesPayload {
   backend: "x11" | "waylandPortal" | "windowsGraphicsCapture" | null;
@@ -209,6 +244,11 @@ export interface RecordingSnapshot {
   notice: string | null;
   /** Peak level of the last 0.1 s in dBFS (-120…0) while audio is recorded. */
   audioLevel: number | null;
+  /** Average (RMS) level of the last 0.1 s in dBFS. */
+  audioRms: number | null;
+  /** 0.1 s blocks that reached 0 dBFS (cut off). */
+  clipped: number;
+  warning: string | null;
   audioTracks: number;
   audioOnly: boolean;
 }
@@ -226,15 +266,18 @@ export interface RecordingOptions {
   maxMinutes: number;
   audio?: AudioOptions;
   webcam?: WebcamOptions;
+  extras?: { splitMinutes: number; softwareOnly: boolean; trackClicks: boolean; trackKeys: boolean };
 }
 
-export type AudioFormat = "mp3" | "m4a" | "opus" | "flac" | "wav";
+export type AudioFormat = "mp3" | "m4a" | "opus" | "ogg" | "flac" | "wav";
 
 export interface AudioDevice {
   id: string;
   name: string;
   kind: "microphone" | "system";
   default: boolean;
+  channels?: number;
+  sampleRate?: number;
 }
 
 export interface AudioOptions {
@@ -245,6 +288,10 @@ export interface AudioOptions {
   systemVolume: number;
   micDenoise?: boolean;
   micNormalize?: boolean;
+  micGate?: boolean;
+  echoCancel?: boolean;
+  sampleRate?: number;
+  channels?: number;
 }
 
 export interface WebcamOptions {
@@ -252,6 +299,8 @@ export interface WebcamOptions {
   position: Settings["recWebcamPosition"];
   size: number;
   shape: Settings["recWebcamShape"];
+  border?: string;
+  shadow?: boolean;
 }
 
 export interface Camera {
@@ -300,7 +349,7 @@ export interface MediaDetail {
 
 export interface ExportPreset {
   kind: "convert" | "compress" | "audio" | "gif" | "trim";
-  format: "mp4" | "webm" | "mkv" | "gif" | "mp3" | "m4a" | "wav" | "flac" | "opus";
+  format: "mp4" | "webm" | "mkv" | "gif" | "mp3" | "m4a" | "wav" | "flac" | "opus" | "ogg";
   quality: "high" | "balanced" | "small";
   startMs?: number | null;
   endMs?: number | null;
@@ -309,6 +358,39 @@ export interface ExportPreset {
   volume?: number;
   denoise?: boolean;
   normalize?: boolean;
+  crop?: { x: number; y: number; width: number; height: number } | null;
+  rotate?: 0 | 90 | 180 | 270;
+  speed?: number;
+  fadeInMs?: number;
+  fadeOutMs?: number;
+  fps?: number;
+  videoCodec?: "" | "h264" | "hevc" | "av1" | "vp9";
+  videoKbps?: number;
+  audioKbps?: number;
+  clickHighlights?: boolean;
+  keystrokes?: boolean;
+}
+
+export interface ShortcutRow {
+  action: string;
+  label: string;
+  accelerator: string | null;
+  default: string;
+}
+
+export interface DeviceRow {
+  kind: "microphone" | "system-audio" | "webcam" | "display" | "speaker";
+  backendId: string;
+  name: string;
+  isDefault: boolean;
+  connected: boolean;
+  details: { channels?: number; sampleRate?: number; width?: number; height?: number };
+  lastSeen: number;
+}
+
+export interface ScheduleInfo {
+  atMs: number;
+  label: string;
 }
 
 export interface ExportUpdate {

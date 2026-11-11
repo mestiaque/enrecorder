@@ -258,3 +258,54 @@ available on Wayland and privacy-sensitive), transcription (needs a local speech
 
 **Not verified here:** the Windows installer and the bundled FFmpeg run only on Windows (CI
 builds them); no GitHub access from this environment to dry-run the FFmpeg download.
+
+## Completion pass — everything left in the brief (2026-11-12)
+
+**Implemented**
+* Audio: sample rate / channels, noise gate (`agate`), echo cancellation (`module-echo-cancel`,
+  loaded for the recording and unloaded by a guard), per-source volume sliders, OGG/Vorbis; the
+  meter reports peak + RMS, counts clipped blocks and warns after 10 s of silence; the floating
+  controls show the level.
+* Recording: file splitting into complete parts, scheduled recording, camera-only source,
+  software-only encoding, configurable global shortcuts (`shortcuts` table, conflict check,
+  roll-back when the system refuses a combination), desktop notifications.
+* Pointer/keyboard track (`track.rs`): X11 `QueryPointer`/`QueryKeymap` and Windows
+  `GetCursorPos`/`GetAsyncKeyState` sampled every 16 ms while recording (paused with the
+  recording), saved as JSON; exports burn click highlights and key combinations in through an
+  ASS overlay that follows trim, crop, speed and scale.
+* Exports and editor: crop, rotate, speed (atempo chain), fades, frame rate, codec, bitrates,
+  size estimate, retry, duplicate guard, frame extraction, silence detection; the Media Editor
+  has drag-to-crop, split, save frame, find/trim silence and a waveform.
+* Library: tags, filters (date, length, size, resolution, tag), grid view, multi-select (tag,
+  delete), missing-file check, re-read file.
+* Screenshots: custom colour, layer order, zoom, copy/paste of annotations, Finish (rotate,
+  scale, border, shadow), default format/quality, file name template; the toolbar wraps on
+  narrow windows.
+* Settings: Screenshots, Shortcuts, Devices (`devices` table), Performance, Privacy (log
+  retention, notifications), Tools → Transcription.
+* Transcription (`media::transcribe`): whisper.cpp program and `ggml-*.bin` model found in the
+  chosen path, `<data>/whisper`, the usual model folders or PATH; FFmpeg → 16 kHz mono WAV →
+  `whisper-cli -osrt` → "<name>.srt" next to the media (never overwritten), progress events,
+  cancel, temporary files removed, English-only models refused for other languages.
+* Webcam: rounded shape, frame colour, shadow.
+
+**Tests executed**
+* `cargo test -p enrec-core`: 97 passed — new: silence/clipping warning, file splitting,
+  pointer track saved with a recording, editing exports (crop + rotate + speed + fades + click
+  overlay) checked with FFprobe, silence detection on generated audio, tags/filters/devices/
+  shortcuts in SQLite, every webcam shape/frame/shadow graph run in FFmpeg, the transcription
+  pipeline with real FFmpeg and a stand-in `whisper-cli` (progress, naming, failure, no sound,
+  cancel).
+* `cargo test -p enrecorder`: 3 passed; `pnpm test` (vitest): 16 passed;
+  `pnpm typecheck` clean.
+* clippy `-D warnings`: workspace on Linux (all targets) and core + app for
+  `x86_64-pc-windows-gnu`.
+* Release .deb built in Docker; Xvfb smoke tests: `smoke-ui`, `smoke-record` (floating controls
+  at the new width), `smoke-audio`, `smoke-library`, `smoke-screenshot` (toolbar wrap: Save and
+  Close visible at 1280 px), and the new `smoke-features` (settings pages, a recording with
+  "Remember clicks/keys": 3 held clicks and Ctrl+Alt+T recorded, grid view + filters, editor).
+
+**Not verified here:** whisper.cpp itself (not bundled; building downloaded third-party code
+was not allowed in this environment — CLI flags and progress format were checked against the
+1.7.6 sources); Windows on real hardware; Wayland on GNOME/KDE hardware; pointer tracks on
+Wayland are impossible by design.

@@ -67,43 +67,135 @@ fn file_stem() -> String {
 }
 
 #[tauri::command]
-pub async fn start_video_recording(app: AppHandle, mut options: RecordingOptions) -> Result<Snapshot> {
-    blocking(move || {
-        let state = app.state::<AppState>();
-        if state.recording_active() {
-            return Err(AppError::Other("A recording is already running".into()));
+pub async fn start_video_recording(app: AppHandle, options: RecordingOptions) -> Result<Snapshot> {
+    blocking(move || start_video(&app, options)).await
+}
+
+/// Starts a screen recording (from the page, a shortcut via the page, or the schedule).
+pub fn start_video(app: &AppHandle, mut options: RecordingOptions) -> Result<Snapshot> {
+    let state = app.state::<AppState>();
+    if state.recording_active() {
+        return Err(AppError::Other("A recording is already running".into()));
+    }
+    let backend = state.capture.as_ref().map_err(|why| AppError::Unsupported(why.clone()))?.clone();
+    let tools = state.tools.read().clone();
+    let ffmpeg = tools.ffmpeg.ok_or(AppError::FfmpegMissing)?;
+    let caps = tools.capabilities.ok_or_else(|| AppError::Other("The encoders are still being tested; try again in a few seconds".into()))?;
+    let output_dir = state.recordings_folder();
+    check_output_folder(&output_dir.to_string_lossy())?;
+    if matches!(options.source, CaptureSource::Camera { .. }) {
+        // The camera is the whole picture: no corner overlay of itself.
+        options.webcam.device = None;
+    }
+    let keep_alive = echo_cancel(&mut options.audio)?;
+    let input = backend.input(&CaptureRequest { source: options.source.clone(), fps: options.fps, show_cursor: options.show_cursor })?;
+    let plan = plan(&options, &input, &caps)?;
+    // Pointer/key track for click highlights and keystrokes on export (post-processing).
+    let tracking = if options.extras.track_clicks || options.extras.track_keys {
+        match enrec_core::track::sampler_for(state.system.read().display_server) {
+            Ok(sampler) => Some(session::Tracking { sampler, keys: options.extras.track_keys, dir: state.tracks_dir() }),
+            Err(e) => {
+                log::warn!("no pointer track for this recording: {e}");
+                None
+            }
         }
-        let backend = state.capture.as_ref().map_err(|why| AppError::Unsupported(why.clone()))?.clone();
-        let tools = state.tools.read().clone();
-        let ffmpeg = tools.ffmpeg.ok_or(AppError::FfmpegMissing)?;
-        let caps = tools.capabilities.ok_or_else(|| AppError::Other("The encoders are still being tested; try again in a few seconds".into()))?;
-        let output_dir = state.recordings_folder();
-        check_output_folder(&output_dir.to_string_lossy())?;
-        let keep_alive = echo_cancel(&mut options.audio)?;
-        let input = backend.input(&CaptureRequest { source: options.source.clone(), fps: options.fps, show_cursor: options.show_cursor })?;
-        let plan = plan(&options, &input, &caps)?;
-        let observer = Arc::new(UiObserver { app: app.clone(), last_progress: Mutex::new(Instant::now() - Duration::from_secs(1)) });
-        let handle = session::start(
-            session::StartParams {
-                db: state.db.clone(),
-                ffmpeg: PathBuf::from(&ffmpeg.path),
-                ffprobe: tools.ffprobe.map(|t| PathBuf::from(t.path)),
-                input,
-                plan,
-                options,
-                output_dir,
-                file_stem: file_stem(),
-                min_free_bytes: MIN_FREE,
-                keep_alive,
-                tracking,
-            },
-            observer,
-        )?;
-        let snap = handle.snapshot();
-        *state.recorder.lock() = Some(handle);
-        Ok(snap)
-    })
-    .await
+    } else {
+        None
+    };
+    let observer = Arc::new(UiObserver { app: app.clone(), last_progress: Mutex::new(Instant::now() - Duration::from_secs(1)) });
+    let handle = session::start(
+        session::StartParams {
+            db: state.db.clone(),
+            ffmpeg: PathBuf::from(&ffmpeg.path),
+            ffprobe: tools.ffprobe.map(|t| PathBuf::from(t.path)),
+            input,
+            plan,
+            options,
+            output_dir,
+            file_stem: file_stem(),
+            min_free_bytes: MIN_FREE,
+            keep_alive,
+            tracking,
+        },
+        observer,
+    )?;
+    let snap = handle.snapshot();
+    *state.recorder.lock() = Some(handle);
+    Ok(snap)
+}
+
+// ------------------------------------------------------------------ scheduled recording
+
+pub const EV_SCHEDULE: &str = "schedule-changed";
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleInfo {
+    at_ms: i64,
+    label: String,
+}
+
+#[tauri::command]
+pub fn schedule_status(state: tauri::State<AppState>) -> Option<ScheduleInfo> {
+    state.schedule.lock().as_ref().map(|s| ScheduleInfo { at_ms: s.at_ms, label: s.label.clone() })
+}
+
+/// Starts `options` at `at_ms` (Unix ms), even with the window hidden. One schedule at a time;
+/// it lasts while ENRecorder runs.
+#[tauri::command]
+pub fn schedule_recording(app: AppHandle, options: RecordingOptions, at_ms: i64, label: String) -> Result<ScheduleInfo> {
+    let now = enrec_core::database::now_ms();
+    if at_ms <= now + 2000 {
+        return Err(AppError::InvalidSetting("choose a time in the future".into()));
+    }
+    if at_ms > now + 7 * 24 * 3600 * 1000 {
+        return Err(AppError::InvalidSetting("a schedule can be at most a week ahead".into()));
+    }
+    let state = app.state::<AppState>();
+    if let Some(old) = state.schedule.lock().take() {
+        old.cancel.store(true, std::sync::atomic::Ordering::Release);
+    }
+    let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    *state.schedule.lock() = Some(crate::state::Scheduled { at_ms, label: label.clone(), cancel: cancel.clone() });
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        while enrec_core::database::now_ms() < at_ms {
+            if cancel.load(std::sync::atomic::Ordering::Acquire) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        let st = app2.state::<AppState>();
+        st.schedule.lock().take();
+        let _ = app2.emit(EV_SCHEDULE, Option::<ScheduleInfo>::None);
+        log::info!("scheduled recording starting");
+        if let Err(e) = start_video(&app2, options) {
+            log::error!("scheduled recording could not start: {e}");
+            notify(&app2, "Scheduled recording did not start", &e.to_string());
+        }
+    });
+    let info = ScheduleInfo { at_ms, label };
+    let _ = app.emit(EV_SCHEDULE, Some(info.clone()));
+    Ok(info)
+}
+
+#[tauri::command]
+pub fn cancel_schedule(app: AppHandle) {
+    if let Some(s) = app.state::<AppState>().schedule.lock().take() {
+        s.cancel.store(true, std::sync::atomic::Ordering::Release);
+    }
+    let _ = app.emit(EV_SCHEDULE, Option::<ScheduleInfo>::None);
+}
+
+/// A desktop notification (Settings → General → notifications).
+pub fn notify(app: &AppHandle, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    if !app.state::<AppState>().settings.read().notify_on_save {
+        return;
+    }
+    if let Err(e) = app.notification().builder().title(title).body(body).show() {
+        log::warn!("notification: {e}");
+    }
 }
 
 /// Microphones and system-audio sources (PulseAudio/PipeWire on Linux, DirectShow on Windows).
@@ -122,6 +214,44 @@ pub async fn list_cameras(app: AppHandle) -> Result<Vec<enrec_core::webcam::Came
     blocking(move || {
         let ffmpeg = app.state::<AppState>().tools.read().ffmpeg.clone().map(|t| PathBuf::from(t.path));
         enrec_core::webcam::list_cameras(ffmpeg.as_deref())
+    })
+    .await
+}
+
+/// Device manager: audio devices, cameras and displays seen now plus the ones seen before
+/// (unplugged devices stay listed as disconnected).
+#[tauri::command]
+pub async fn device_manager(app: AppHandle) -> Result<Vec<enrec_core::database::DeviceRow>> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let ffmpeg = state.tools.read().ffmpeg.clone().map(|t| PathBuf::from(t.path));
+        let mut present: Vec<(String, String, String, bool, serde_json::Value)> = Vec::new();
+        let mut kinds = Vec::new();
+        if let Ok(list) = enrec_core::audio::list_devices(ffmpeg.as_deref()) {
+            kinds.extend(["microphone", "system-audio"]);
+            for d in list {
+                let kind = if d.kind == enrec_core::audio::AudioKind::Microphone { "microphone" } else { "system-audio" };
+                present.push((kind.into(), d.id, d.name, d.default, serde_json::json!({ "channels": d.channels, "sampleRate": d.sample_rate })));
+            }
+        }
+        if let Ok(cams) = enrec_core::webcam::list_cameras(ffmpeg.as_deref()) {
+            kinds.push("webcam");
+            for c in cams {
+                present.push(("webcam".into(), c.id.clone(), c.name.clone(), false, serde_json::json!({})));
+            }
+        }
+        if let Ok(b) = &state.capture {
+            if let Ok(sources) = b.list_sources() {
+                kinds.push("display");
+                for src in sources {
+                    if let CaptureSource::Monitor { id, name, width, height, primary, .. } = src {
+                        present.push(("display".into(), id, name, primary, serde_json::json!({ "width": width, "height": height })));
+                    }
+                }
+            }
+        }
+        state.db.sync_devices(&kinds, &present)?;
+        state.db.list_devices()
     })
     .await
 }
@@ -175,7 +305,7 @@ pub async fn start_audio_recording(app: AppHandle, mut options: enrec_core::reco
                 file_stem: audio_stem(),
                 min_free_bytes: MIN_FREE,
                 keep_alive,
-                tracking,
+                tracking: None,
             },
             observer,
         )?;
@@ -298,6 +428,14 @@ fn on_state(app: &AppHandle, s: &Snapshot) {
                 let _ = w.close();
             }
             crate::tray::show_main(app);
+            match (st, &s.output_path) {
+                (RecState::Completed, Some(path)) => {
+                    let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    notify(app, if s.audio_only { "Audio recording saved" } else { "Recording saved" }, &name);
+                }
+                (RecState::Failed, _) => notify(app, "Recording failed", s.error.as_deref().unwrap_or("")),
+                _ => {}
+            }
         }
         _ => {}
     }
@@ -308,7 +446,7 @@ fn open_hud(app: &AppHandle) {
     if app.get_webview_window("hud").is_some() {
         return;
     }
-    let (w, h) = (300.0, 52.0);
+    let (w, h) = (340.0, 52.0);
     let mut b = WebviewWindowBuilder::new(app, "hud", WebviewUrl::App("index.html?view=hud".into()))
         .title("ENRecorder controls")
         .inner_size(w, h)

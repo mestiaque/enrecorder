@@ -1,12 +1,14 @@
-import { ArrowUpRight, Check, Circle, Copy, Crop, Eraser, Hash, Highlighter, Minus, MousePointer2, Pencil, Redo2, Save, ScanText, Square, Trash2, Type, Undo2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, Check, Circle, Copy, Crop, Eraser, Frame, Hash, Highlighter, Minus, MousePointer2, Pencil, Redo2, Save, ScanText, Square, Trash2, Type, Undo2, X } from "lucide-react";
+import { useSettings } from "../../store/settings";
+import { Popover } from "../ui/menus";
 import { Dialog } from "../ui/overlays";
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { cn } from "../../lib/format";
 import type { Screenshot } from "../../lib/types";
 import { toast } from "../../store/ui";
-import { Button, IconButton, Select } from "../ui/primitives";
-import { bounds, drawItem, emptyDoc, hit, move, nextStep, norm, parseDoc, renderExport, type Doc, type Item, type Tool } from "./annotate";
+import { Button, IconButton, Select, Slider, Switch } from "../ui/primitives";
+import { bounds, drawItem, emptyDoc, finishedSize, hit, move, nextStep, norm, parseDoc, renderExport, reorder, type Doc, type Item, type Tool } from "./annotate";
 
 const TOOLS: { id: Tool; label: string; icon: ReactNode; key: string }[] = [
   { id: "select", label: "Select and move", icon: <MousePointer2 className="h-4 w-4" />, key: "v" },
@@ -38,7 +40,11 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
   const [draft, setDraft] = useState<Item | null>(null);
   const [cropDraft, setCropDraft] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [textAt, setTextAt] = useState<{ x: number; y: number; sx: number; sy: number } | null>(null);
-  const [format, setFormat] = useState<Screenshot["format"]>(shot.format);
+  const defaults = useSettings((st) => st.settings);
+  // A new screenshot (never annotated) is saved in the default format from Settings.
+  const [format, setFormat] = useState<Screenshot["format"]>(shot.annotations ? shot.format : defaults.shotFormat);
+  const [zoom, setZoom] = useState<"fit" | number>("fit");
+  const clip = useRef<Item | null>(null);
   const [busy, setBusy] = useState(false);
   const [ocr, setOcr] = useState<{ text: string; busy: boolean } | null>(null);
   const drag = useRef<{ x: number; y: number; id: string } | null>(null);
@@ -193,7 +199,17 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
         void save();
       } else if ((e.ctrlKey || e.metaKey) && k === "c") {
         e.preventDefault();
-        void copy();
+        // With an annotation selected Ctrl+C copies it (Ctrl+V pastes a copy); otherwise the image.
+        const sel = doc.items.find((i) => i.id === selected);
+        if (sel) clip.current = sel;
+        else void copy();
+      } else if ((e.ctrlKey || e.metaKey) && k === "v" && clip.current) {
+        e.preventDefault();
+        const off = Math.max(12, (img?.naturalWidth ?? 1000) / 80);
+        const copyIt = { ...move(clip.current, off, off), id: uid() } as Item;
+        clip.current = copyIt;
+        commit({ ...doc, items: [...doc.items, copyIt] });
+        setSelected(copyIt.id);
       } else if (k === "delete" || k === "backspace") removeSelected();
       else if (k === "escape") onClose();
       else if (!e.ctrlKey && !e.metaKey) {
@@ -212,7 +228,7 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
     if (!png || busy) return;
     setBusy(true);
     try {
-      const saved = await api.saveScreenshot(shot.id, png, format, 90, JSON.stringify(doc));
+      const saved = await api.saveScreenshot(shot.id, png, format, defaults.shotQuality, JSON.stringify(doc));
       toast({ kind: "success", title: "Screenshot saved", detail: saved.path });
       onClose(saved);
     } catch (e) {
@@ -251,7 +267,7 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-bg animate-fade-in" role="dialog" aria-label="Screenshot editor">
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-panel px-2">
+      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-1 border-b border-line bg-panel px-2 py-1.5">
         <div className="flex items-center gap-0.5 rounded-md border border-line bg-bg p-0.5">
           {TOOLS.map((t) => (
             <IconButton key={t.id} label={t.label} shortcut={t.key.toUpperCase()} active={tool === t.id} onClick={() => setTool(t.id)} className="h-7 w-7">
@@ -263,6 +279,9 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
           {COLORS.map((c) => (
             <button key={c} aria-label={`Colour ${c}`} title={c} onClick={() => setColor(c)} className={cn("h-5 w-5 rounded-full border border-line", color === c && "ring-2 ring-accent ring-offset-1 ring-offset-panel")} style={{ background: c }} />
           ))}
+          <label title="Any colour" className={cn("relative h-5 w-5 cursor-pointer overflow-hidden rounded-full border border-line", !COLORS.includes(color) && "ring-2 ring-accent ring-offset-1 ring-offset-panel")} style={{ background: COLORS.includes(color) ? "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)" : color }}>
+            <input type="color" aria-label="Any colour" value={color} onChange={(e) => setColor(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" />
+          </label>
         </div>
         <div className="flex items-center gap-0.5">
           {WIDTHS.map((w) => (
@@ -281,6 +300,50 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
         <IconButton label="Delete the selected item" shortcut="Del" disabled={!selected} onClick={removeSelected}>
           <Trash2 className="h-4 w-4" />
         </IconButton>
+        <IconButton label="Bring forward" disabled={!selected} onClick={() => selected && commit({ ...doc, items: reorder(doc.items, selected, 1) })}>
+          <ArrowUp className="h-4 w-4" />
+        </IconButton>
+        <IconButton label="Send backward" disabled={!selected} onClick={() => selected && commit({ ...doc, items: reorder(doc.items, selected, -1) })}>
+          <ArrowDown className="h-4 w-4" />
+        </IconButton>
+        <Popover
+          trigger={
+            <Button size="sm" variant="ghost" title="Rotate, resize, border and shadow">
+              <Frame className="h-3.5 w-3.5" />
+              Finish
+            </Button>
+          }
+          align="start"
+        >
+          <div className="w-[260px] space-y-3 text-[12px]">
+            <div className="flex items-center justify-between">
+              <span>Rotate</span>
+              <Select value={doc.finish.rotate} onChange={(v) => commit({ ...doc, finish: { ...doc.finish, rotate: v } })} options={[0, 90, 180, 270].map((r) => ({ value: r as 0 | 90 | 180 | 270, label: `${r}°` }))} />
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Size</span>
+              <Select value={doc.finish.scale} onChange={(v) => commit({ ...doc, finish: { ...doc.finish, scale: v } })} options={[25, 50, 75, 100, 150, 200].map((p) => ({ value: p, label: `${p}%` }))} />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span>Border</span>
+                <span className="text-faint">{doc.finish.border}px</span>
+              </div>
+              <Slider value={doc.finish.border} min={0} max={60} step={2} onChange={(v) => setDoc({ ...doc, finish: { ...doc.finish, border: v } })} onCommit={(v) => commit({ ...doc, finish: { ...doc.finish, border: v } })} />
+              <div className="flex gap-1">
+                {["#ffffff", "#111111", "#e5e7eb", "#6366f1"].map((c) => (
+                  <button key={c} aria-label={`Border ${c}`} onClick={() => commit({ ...doc, finish: { ...doc.finish, borderColor: c } })} className={cn("h-5 w-5 rounded border border-line", doc.finish.borderColor === c && "ring-2 ring-accent")} style={{ background: c }} />
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Shadow</span>
+              <Switch checked={doc.finish.shadow} onChange={(v) => commit({ ...doc, finish: { ...doc.finish, shadow: v } })} label="Shadow" />
+            </div>
+            {img && <div className="text-faint">Result: {(() => { const c = doc.crop ?? { w: img.naturalWidth, h: img.naturalHeight }; const f = finishedSize(Math.round(c.w), Math.round(c.h), doc.finish); return `${f.w}×${f.h}`; })()}</div>}
+          </div>
+        </Popover>
+        <Select value={String(zoom)} onChange={(v) => setZoom(v === "fit" ? "fit" : Number(v))} options={[{ value: "fit", label: "Fit" }, { value: "0.5", label: "50%" }, { value: "1", label: "100%" }, { value: "2", label: "200%" }]} />
         {doc.crop && (
           <Button size="sm" variant="ghost" onClick={() => commit({ ...doc, crop: null })}>
             Remove crop
@@ -307,15 +370,16 @@ export function ScreenshotEditor({ shot, startTool = "arrow", onClose }: { shot:
           <X className="h-4 w-4" />
         </IconButton>
       </header>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6" style={{ background: "repeating-conic-gradient(rgb(var(--raised)) 0 25%, rgb(var(--bg)) 0 50%) 0 0/20px 20px" }}>
+      <div className={cn("relative flex min-h-0 flex-1 p-6", zoom === "fit" ? "items-center justify-center overflow-hidden" : "overflow-auto")} style={{ background: "repeating-conic-gradient(rgb(var(--raised)) 0 25%, rgb(var(--bg)) 0 50%) 0 0/20px 20px" }}>
         {!img && <div className="text-[13px] text-muted">Opening…</div>}
-        <div className="relative max-h-full max-w-full">
+        <div className={cn("relative", zoom === "fit" ? "max-h-full max-w-full" : "m-auto")}>
           <canvas
             ref={canvasRef}
             onPointerDown={down}
             onPointerMove={moveP}
             onPointerUp={up}
-            className={cn("block max-h-[calc(100vh-7rem)] max-w-full rounded shadow-pop", tool === "select" ? "cursor-default" : "cursor-crosshair", !img && "hidden")}
+            className={cn("block rounded shadow-pop", zoom === "fit" && "max-h-[calc(100vh-7rem)] max-w-full", tool === "select" ? "cursor-default" : "cursor-crosshair", !img && "hidden")}
+            style={zoom !== "fit" && img ? { width: img.naturalWidth * zoom, height: img.naturalHeight * zoom, maxWidth: "none" } : undefined}
           />
           {textAt && (
             <input

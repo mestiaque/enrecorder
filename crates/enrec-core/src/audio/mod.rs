@@ -32,6 +32,25 @@ pub struct AudioDevice {
     pub name: String,
     pub kind: AudioKind,
     pub default: bool,
+    /// Native format reported by the audio server (0 = unknown).
+    #[serde(default)]
+    pub channels: u32,
+    #[serde(default)]
+    pub sample_rate: u32,
+}
+
+/// "s16le 2ch 48000Hz" → (2, 48000).
+pub fn parse_sample_spec(spec: &str) -> (u32, u32) {
+    let mut ch = 0;
+    let mut rate = 0;
+    for w in spec.split_whitespace() {
+        if let Some(n) = w.strip_suffix("ch") {
+            ch = n.parse().unwrap_or(0);
+        } else if let Some(n) = w.strip_suffix("Hz") {
+            rate = n.parse().unwrap_or(0);
+        }
+    }
+    (ch, rate)
 }
 
 /// Audio in a recording. `None` = that source is off.
@@ -116,14 +135,15 @@ pub fn parse_pactl_sources(json: &str, default_source: &str, default_sink: &str)
     for s in list {
         let Some(name) = s["name"].as_str() else { continue };
         let desc = s["description"].as_str().unwrap_or(name).to_string();
+        let (channels, sample_rate) = parse_sample_spec(s["sample_specification"].as_str().unwrap_or(""));
         // pactl names the field "monitor_of_sink" (PulseAudio) or "monitor_source" (15.99 with
         // PipeWire); either way it holds the output a monitor belongs to.
         let real = |m: &&str| !m.is_empty() && *m != "n/a";
         let monitor_of = s["monitor_of_sink"].as_str().filter(real).or_else(|| s["monitor_source"].as_str().filter(real).filter(|_| name.ends_with(".monitor")));
         if let Some(sink) = monitor_of {
-            out.push(AudioDevice { id: name.into(), name: desc.trim_start_matches("Monitor of ").to_string(), kind: AudioKind::System, default: sink == default_sink });
+            out.push(AudioDevice { id: name.into(), name: desc.trim_start_matches("Monitor of ").to_string(), kind: AudioKind::System, default: sink == default_sink, channels, sample_rate });
         } else {
-            out.push(AudioDevice { id: name.into(), name: desc, kind: AudioKind::Microphone, default: name == default_source });
+            out.push(AudioDevice { id: name.into(), name: desc, kind: AudioKind::Microphone, default: name == default_source, channels, sample_rate });
         }
     }
     out
@@ -146,7 +166,7 @@ pub fn parse_dshow(stderr: &str) -> Vec<AudioDevice> {
         let system = ["stereo mix", "what u hear", "loopback", "cable output", "wave out"].iter().any(|k| lower.contains(k));
         let kind = if system { AudioKind::System } else { AudioKind::Microphone };
         let default = !out.iter().any(|d| d.kind == kind);
-        out.push(AudioDevice { id: name.clone(), name, kind, default });
+        out.push(AudioDevice { id: name.clone(), name, kind, default, channels: 0, sample_rate: 0 });
     }
     out
 }
@@ -167,8 +187,8 @@ pub fn list_devices(ffmpeg: Option<&Path>) -> Result<Vec<AudioDevice>> {
     let Some(json) = text("pactl", &["-f", "json", "list", "sources"]) else {
         // No pactl: the server's defaults still work through FFmpeg.
         return Ok(vec![
-            AudioDevice { id: "default".into(), name: "Default microphone".into(), kind: AudioKind::Microphone, default: true },
-            AudioDevice { id: "@DEFAULT_MONITOR@".into(), name: "System audio (default output)".into(), kind: AudioKind::System, default: true },
+            AudioDevice { id: "default".into(), name: "Default microphone".into(), kind: AudioKind::Microphone, default: true, channels: 0, sample_rate: 0 },
+            AudioDevice { id: "@DEFAULT_MONITOR@".into(), name: "System audio (default output)".into(), kind: AudioKind::System, default: true, channels: 0, sample_rate: 0 },
         ]);
     };
     let src = text("pactl", &["get-default-source"]).unwrap_or_default();
@@ -374,7 +394,9 @@ mod tests {
 
     #[test]
     fn pactl_sources() {
-        let json = r#"[{"name":"alsa_output.pci.analog-stereo.monitor","description":"Monitor of Built-in Audio Analog Stereo","monitor_of_sink":"alsa_output.pci.analog-stereo"},
+        assert_eq!(parse_sample_spec("s16le 2ch 48000Hz"), (2, 48000));
+        assert_eq!(parse_sample_spec(""), (0, 0));
+        let json = r#"[{"name":"alsa_output.pci.analog-stereo.monitor","description":"Monitor of Built-in Audio Analog Stereo","monitor_of_sink":"alsa_output.pci.analog-stereo","sample_specification":"s16le 2ch 44100Hz"},
             {"name":"alsa_input.pci.analog-stereo","description":"Built-in Audio Analog Stereo","monitor_of_sink":null},
             {"name":"bluez_input.headset","description":"Headset","monitor_of_sink":"n/a"},
             {"name":"speaker.monitor","description":"Monitor of speaker","monitor_source":"speaker"}]"#;
@@ -383,6 +405,7 @@ mod tests {
         assert_eq!(d.len(), 4);
         assert_eq!(d[3].kind, AudioKind::System);
         assert_eq!((d[0].kind, d[0].default, d[0].name.as_str()), (AudioKind::System, true, "Built-in Audio Analog Stereo"));
+        assert_eq!((d[0].channels, d[0].sample_rate), (2, 44100));
         assert_eq!((d[1].kind, d[1].default), (AudioKind::Microphone, true));
         assert_eq!((d[2].kind, d[2].default), (AudioKind::Microphone, false));
         assert!(parse_pactl_sources("not json", "", "").is_empty());

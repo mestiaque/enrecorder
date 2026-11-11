@@ -222,6 +222,9 @@ impl CaptureBackend for WaylandBackend {
     }
 
     fn input(&self, req: &CaptureRequest) -> Result<CaptureInput> {
+        if let CaptureSource::Camera { id, .. } = &req.source {
+            return Ok(super::camera_input(id, req.fps));
+        }
         if !matches!(req.source, CaptureSource::Portal) {
             return Err(AppError::Unsupported("on Wayland the screen or window is chosen in the sharing dialog".into()));
         }

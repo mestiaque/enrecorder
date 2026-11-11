@@ -34,7 +34,9 @@ export function LivePanel({ snap }: { snap: RecordingSnapshot }) {
           </Button>
         </div>
       </div>
-      {snap.audioTracks > 0 && <AudioMeter level={rec ? snap.audioLevel : null} className="mt-5" />}
+      {snap.audioTracks > 0 && <AudioMeter level={rec ? snap.audioLevel : null} rms={rec ? snap.audioRms : null} clipped={snap.clipped} className="mt-5" />}
+      {snap.warning && <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-500">{snap.warning}</div>}
+      {snap.notice && <div className="mt-3 text-[12px] text-muted">{snap.notice}</div>}
       {snap.audioOnly ? (
         <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-4 text-[12px] sm:grid-cols-3">
           <Info label="Format" value={snap.encoder} />

@@ -15,12 +15,18 @@ import { EncoderTable } from "../media/EncoderTable";
 import { Dialog } from "../ui/overlays";
 import { Button, Switch } from "../ui/primitives";
 import { AboutSection } from "./AboutSection";
+import { DevicesSection, PerformanceSection, PrivacySection, ScreenshotSection, ShortcutsSection, TranscriptionSection } from "./MoreSections";
 
 const SECTIONS = [
   ["general", "General"],
   ["storage", "Storage"],
   ["tools", "Tools"],
   ["appearance", "Appearance"],
+  ["screenshots", "Screenshots"],
+  ["shortcuts", "Shortcuts"],
+  ["devices", "Devices"],
+  ["performance", "Performance"],
+  ["privacy", "Privacy"],
   ["logs", "Logs"],
   ["about", "About"],
 ] as const;
@@ -230,6 +236,7 @@ function ToolsSection() {
         </Field>
       </div>
       <EncoderTable />
+      <TranscriptionSection />
     </div>
   );
 }
@@ -321,6 +328,11 @@ export function SettingsDialog() {
           {current === "storage" && <StorageSection />}
           {current === "tools" && <ToolsSection />}
           {current === "appearance" && <AppearanceSection />}
+          {current === "screenshots" && <ScreenshotSection />}
+          {current === "shortcuts" && <ShortcutsSection />}
+          {current === "devices" && <DevicesSection />}
+          {current === "performance" && <PerformanceSection />}
+          {current === "privacy" && <PrivacySection />}
           {current === "logs" && <LogsSection />}
           {current === "about" && <AboutSection />}
         </div>

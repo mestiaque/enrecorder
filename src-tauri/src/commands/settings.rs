@@ -83,3 +83,36 @@ pub fn reset_settings(app: AppHandle, state: State<AppState>) -> Result<Settings
     }
     Ok(payload(&app.state::<AppState>()))
 }
+
+// ------------------------------------------------------------------ shortcuts
+
+#[tauri::command]
+pub fn get_shortcuts(state: State<AppState>) -> Result<Vec<enrec_core::database::shortcuts::ShortcutRow>> {
+    state.db.shortcuts()
+}
+
+/// Changes one action's shortcut (`None` turns it off); refused when another action or the
+/// system already uses it.
+#[tauri::command]
+pub fn set_shortcut(app: AppHandle, action: String, accelerator: Option<String>) -> Result<Vec<enrec_core::database::shortcuts::ShortcutRow>> {
+    let state = app.state::<AppState>();
+    let before = state.db.shortcuts()?;
+    state.db.set_shortcut(&action, accelerator.as_deref())?;
+    if let Err(e) = crate::register_shortcuts(&app) {
+        // Another program holds it: go back to what worked.
+        for row in before {
+            let _ = state.db.set_shortcut(&row.action, row.accelerator.as_deref());
+        }
+        let _ = crate::register_shortcuts(&app);
+        return Err(e);
+    }
+    state.db.shortcuts()
+}
+
+#[tauri::command]
+pub fn reset_shortcuts(app: AppHandle) -> Result<Vec<enrec_core::database::shortcuts::ShortcutRow>> {
+    let state = app.state::<AppState>();
+    state.db.reset_shortcuts()?;
+    crate::register_shortcuts(&app)?;
+    state.db.shortcuts()
+}

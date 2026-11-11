@@ -25,6 +25,7 @@ export function HudView() {
         <span className={cn("h-3 w-3 shrink-0 rounded-full", rec ? "animate-pulse bg-red-500" : paused ? "bg-amber-400" : "bg-white/40")} />
         <span className="min-w-[72px] font-mono text-[15px] font-semibold tabular-nums">{formatDuration(snap?.elapsedMs ?? 0)}</span>
         <span className="flex-1 truncate text-[11px] text-white/60">{rec ? "Recording" : paused ? "Paused" : snap?.state === "finalizing" ? "Saving…" : ""}</span>
+        {snap?.audioLevel != null && <HudLevel db={rec ? snap.audioLevel : -120} clipped={snap.clipped > 0} warn={!!snap.warning} />}
         {/* Always rendered so the buttons never shift under the pointer. */}
         <button
           className={cn(btn, "disabled:opacity-30 disabled:hover:bg-transparent")}
@@ -39,5 +40,19 @@ export function HudView() {
         </button>
       </div>
     </div>
+  );
+}
+
+/** Small sound level bar (peak, -60…0 dBFS); red after clipping, amber dot while too quiet. */
+function HudLevel({ db, clipped, warn }: { db: number; clipped: boolean; warn: boolean }) {
+  const pct = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
+  const tone = clipped || db > -3 ? "bg-red-500" : db > -12 ? "bg-amber-400" : "bg-emerald-400";
+  return (
+    <span className="flex items-center gap-1" title={clipped ? "Sound was cut off (too loud)" : warn ? "No sound for a while" : "Sound level"}>
+      {warn && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />}
+      <span className="h-1.5 w-12 overflow-hidden rounded-full bg-white/15">
+        <span className={cn("block h-full rounded-full transition-[width] duration-100", tone)} style={{ width: `${pct}%` }} />
+      </span>
+    </span>
   );
 }

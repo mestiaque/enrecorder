@@ -24,8 +24,20 @@ export function resolveDevice(choice: string, kind: AudioDevice["kind"], devices
   return (list.find((d) => d.default) ?? list[0])?.id ?? null;
 }
 
-export function audioFrom(mic: string, system: string, separate: boolean, devices: AudioDevice[]): AudioOptions {
-  return { microphone: resolveDevice(mic, "microphone", devices), system: resolveDevice(system, "system", devices), separateTracks: separate, micVolume: 100, systemVolume: 100 };
+export function audioFrom(mic: string, system: string, separate: boolean, devices: AudioDevice[], s?: Settings): AudioOptions {
+  return {
+    microphone: resolveDevice(mic, "microphone", devices),
+    system: resolveDevice(system, "system", devices),
+    separateTracks: separate,
+    micVolume: s?.recMicVolume ?? 100,
+    systemVolume: s?.recSystemVolume ?? 100,
+    micDenoise: s?.recMicDenoise ?? false,
+    micNormalize: s?.recMicNormalize ?? false,
+    micGate: s?.recMicGate ?? false,
+    echoCancel: s?.recEchoCancel ?? false,
+    sampleRate: s?.audioSampleRate ?? 48000,
+    channels: s?.audioChannels ?? 2,
+  };
 }
 
 let deviceCache: AudioDevice[] = [];
@@ -50,7 +62,17 @@ export function optionsFrom(s: Settings, source: CaptureSource): RecordingOption
     showCursor: s.recCursor,
     countdown: s.recCountdown,
     maxMinutes: s.recMaxMinutes,
+    extras: { splitMinutes: s.recSplitMinutes, softwareOnly: !s.hwAccel, trackClicks: s.recTrackClicks, trackKeys: s.recTrackKeys },
   };
+}
+
+/** The full recording request from Settings and the chosen source (audio, webcam, extras). */
+export async function buildOptions(source: CaptureSource): Promise<RecordingOptions> {
+  const s = useSettings.getState().settings;
+  const opts = optionsFrom(s, source);
+  if (s.recMic || s.recSystemAudio) opts.audio = audioFrom(s.recMic, s.recSystemAudio, s.recSeparateTracks, await devices(), s);
+  if (s.recWebcam) opts.webcam = { device: s.recWebcam, position: s.recWebcamPosition, size: s.recWebcamSize, shape: s.recWebcamShape, border: s.recWebcamBorder, shadow: s.recWebcamShadow };
+  return opts;
 }
 
 /** Starts with the current form (Record button, Ctrl+Shift+R, tray). */
@@ -62,11 +84,7 @@ export async function startRecording(): Promise<boolean> {
     return false;
   }
   try {
-    const s = useSettings.getState().settings;
-    const opts = optionsFrom(s, source);
-    if (s.recMic || s.recSystemAudio) opts.audio = { ...audioFrom(s.recMic, s.recSystemAudio, s.recSeparateTracks, await devices()), micDenoise: s.recMicDenoise, micNormalize: s.recMicNormalize };
-    if (s.recWebcam) opts.webcam = { device: s.recWebcam, position: s.recWebcamPosition, size: s.recWebcamSize, shape: s.recWebcamShape };
-    await api.startRecording(opts);
+    await api.startRecording(await buildOptions(source));
     return true;
   } catch (e) {
     useNav.getState().go("video");

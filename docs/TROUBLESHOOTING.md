@@ -33,13 +33,40 @@ Settings → Logs shows the full FFmpeg command.
 GNOME/KDE). The selection still works; the black is only the overlay's background.
 
 **Ctrl+Shift+R does nothing** — another app may already use the shortcut (Settings → Logs shows
-"shortcut … is not available"). Use the tray menu or the floating controls instead.
+"shortcut … is not available"). Choose another combination in Settings → Shortcuts, or use the
+tray menu or the floating controls.
 
 **Where are the parts of a failed recording?** — in a hidden folder `.enrecorder-<id>` inside
-the recordings folder; each part is a playable MKV. Automatic recovery arrives in phase 7.
+the recordings folder; each part is a playable MKV. Home offers **Recover** for them after a
+crash or power loss.
 
 **Wayland: "screen sharing portal is not available"** — install `xdg-desktop-portal` and the
 portal for your desktop (`xdg-desktop-portal-gnome`, `-kde` or `-wlr`).
 
 **Wayland: "GStreamer's PipeWire support is missing"** — `sudo apt install gstreamer1.0-pipewire
 gstreamer1.0-tools` (the .deb installs them).
+
+## Transcription
+
+ENRecorder does not include a speech engine. To use **Transcribe** (recording details):
+
+1. Install whisper.cpp so that `whisper-cli` is on PATH, or build it
+   (`cmake -B build && cmake --build build --target whisper-cli`) and choose `build/bin/whisper-cli`
+   in Settings → Tools → Transcription. On Windows, choose `whisper-cli.exe` from a whisper.cpp
+   release.
+2. Download a model (`ggml-base.bin` is a good start; `.en` models understand English only) from
+   the whisper.cpp model page and put it in the **Models folder** (button in Settings → Tools),
+   or choose the file.
+
+The .srt is saved next to the recording; video players load it automatically. "Not set up" in
+Settings means the program or the model was not found.
+
+**No click highlights or key overlay in the export** — "Remember clicks" / "Remember key presses"
+must be on *before* recording (Recording settings). They work on X11 and Windows; Wayland does not
+let apps watch the pointer or keyboard, so the options are hidden there.
+
+**Echo cancellation does nothing** — it needs PipeWire's or PulseAudio's
+`module-echo-cancel` (`pactl load-module module-echo-cancel` must work). Linux only.
+
+**A scheduled recording did not start** — ENRecorder must be running (the tray is enough) at the
+start time; a notification explains why it could not start.

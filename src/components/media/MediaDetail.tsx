@@ -1,12 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ExternalLink, FolderOpen, Pencil, Scissors, Share2, Star, Trash2, Type, X } from "lucide-react";
-import { useState } from "react";
+import { Camera, Captions, ExternalLink, FolderOpen, Loader2, Pencil, Plus, RefreshCw, Scissors, Share2, Star, Trash2, Type, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { Tag } from "../../lib/types";
 import { api, errorMessage } from "../../lib/api";
 import { useMediaUrl } from "../../lib/queries";
 import { formatBytes, formatDate, formatDuration } from "../../lib/format";
 import { useEditorTarget } from "../../store/editor";
 import { useNav } from "../../store/nav";
+import { useTranscribe } from "../../store/transcribe";
 import { confirmDialog, promptDialog, toast } from "../../store/ui";
 import { Button, IconButton } from "../ui/primitives";
 import { ExportDialog } from "./ExportDialog";
@@ -19,6 +21,31 @@ export function MediaDetailPanel({ id, onClose, onEditScreenshot }: { id: string
   const d = useQuery({ queryKey: ["media-item", id], queryFn: () => api.getMedia(id) });
   const stream = useMediaUrl(id);
   const [exporting, setExporting] = useState(false);
+  const player = useRef<HTMLVideoElement>(null);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [mine, setMine] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState("");
+  useEffect(() => {
+    void api.listTags().then(setAllTags).catch(() => {});
+    void api.mediaTagIds(id).then(setMine).catch(() => {});
+  }, [id]);
+  const saveTags = async (ids: string[]) => {
+    setMine(ids);
+    await api.setMediaTags([id], ids).catch(fail("save the tags"));
+    void api.listTags().then(setAllTags).catch(() => {});
+    void qc.invalidateQueries({ queryKey: ["media"] });
+  };
+  const addTag = async () => {
+    const name = newTag.trim();
+    if (!name) return;
+    try {
+      const t = await api.createTag(name);
+      setNewTag("");
+      if (!mine.includes(t.id)) await saveTags([...mine, t.id]);
+    } catch (e) {
+      fail("add the tag")(e);
+    }
+  };
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["media"] });
     void qc.invalidateQueries({ queryKey: ["media-item", id] });
@@ -69,7 +96,7 @@ export function MediaDetailPanel({ id, onClose, onEditScreenshot }: { id: string
         {!exists ? (
           <div className="p-6 text-center text-[12px] text-danger">The file is missing (moved or deleted outside ENRecorder).</div>
         ) : item.kind === "video" ? (
-          <video key={play} src={play} controls className="aspect-video w-full" preload="metadata" />
+          <video ref={player} key={play} src={play} controls className="aspect-video w-full" preload="metadata" />
         ) : item.kind === "audio" ? (
           <audio key={play} src={play} controls className="w-full p-3" preload="metadata" />
         ) : (
@@ -86,6 +113,43 @@ export function MediaDetailPanel({ id, onClose, onEditScreenshot }: { id: string
           ))}
         </dl>
         <div className="mt-1 truncate px-1 font-mono text-[10px] text-faint" title={item.path}>{item.path}</div>
+        <div className="mt-3">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-faint">Tags</div>
+          <div className="flex flex-wrap items-center gap-1">
+            {allTags
+              .filter((t) => mine.includes(t.id))
+              .map((t) => (
+                <span key={t.id} className="flex items-center gap-1 rounded bg-accent/15 px-1.5 py-0.5 text-[11px] text-accent">
+                  {t.name}
+                  <button aria-label={`Remove tag ${t.name}`} onClick={() => void saveTags(mine.filter((x) => x !== t.id))}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            {allTags
+              .filter((t) => !mine.includes(t.id))
+              .slice(0, 6)
+              .map((t) => (
+                <button key={t.id} className="rounded border border-dashed border-line px-1.5 py-0.5 text-[11px] text-muted hover:border-accent hover:text-accent" onClick={() => void saveTags([...mine, t.id])}>
+                  + {t.name}
+                </button>
+              ))}
+          </div>
+          <div className="mt-1.5 flex gap-1.5">
+            <input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void addTag()}
+              placeholder="New tag"
+              aria-label="New tag"
+              maxLength={40}
+              className="h-7 min-w-0 flex-1 rounded-md border border-line bg-bg px-2 text-[12px] outline-none placeholder:text-faint focus:border-accent"
+            />
+            <Button size="sm" disabled={!newTag.trim()} onClick={() => void addTag()}>
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {item.kind === "screenshot" ? (
             <Button onClick={() => onEditScreenshot(item.id)}>
@@ -121,6 +185,40 @@ export function MediaDetailPanel({ id, onClose, onEditScreenshot }: { id: string
             <ExternalLink className="h-3.5 w-3.5" />
             Open with…
           </Button>
+          {item.kind === "video" && exists && (
+            <Button
+              title="Save the frame shown in the player as a screenshot"
+              onClick={() =>
+                void api
+                  .extractFrame(item.id, Math.round((player.current?.currentTime ?? 0) * 1000))
+                  .then(() => {
+                    toast({ kind: "success", title: "Frame saved", detail: "It is in the library with your screenshots." });
+                    refresh();
+                  })
+                  .catch(fail("save the frame"))
+              }
+            >
+              <Camera className="h-3.5 w-3.5" />
+              Save frame
+            </Button>
+          )}
+          {item.kind !== "screenshot" && exists && <TranscribeButton id={item.id} title={item.title} />}
+          <Button
+            title="Read the file again (size, length, codecs) and make a new thumbnail"
+            onClick={() =>
+              void api
+                .reprocessMedia(item.id)
+                .then(() => {
+                  toast({ kind: "success", title: "Updated from the file" });
+                  refresh();
+                  void qc.invalidateQueries({ queryKey: ["thumb"] });
+                })
+                .catch(fail("read the file"))
+            }
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Re-read file
+          </Button>
           <Button variant="ghost" className="text-danger hover:text-danger" onClick={() => void remove()}>
             <Trash2 className="h-3.5 w-3.5" />
             Delete
@@ -129,5 +227,24 @@ export function MediaDetailPanel({ id, onClose, onEditScreenshot }: { id: string
       </div>
       {exporting && <ExportDialog item={item} open onClose={() => setExporting(false)} />}
     </aside>
+  );
+}
+
+/** Subtitles from speech (whisper.cpp, optional). While it runs, the button shows progress and cancels. */
+function TranscribeButton({ id, title }: { id: string; title: string }) {
+  const { mediaId, percent, start } = useTranscribe();
+  if (mediaId === id) {
+    return (
+      <Button title="Stop transcribing" onClick={() => void api.cancelTranscription()}>
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {percent > 0 ? `${percent}% · Cancel` : "Preparing… · Cancel"}
+      </Button>
+    );
+  }
+  return (
+    <Button disabled={!!mediaId} title={mediaId ? "Another file is being transcribed" : "Write subtitles (.srt) from the speech, on this computer (whisper.cpp)"} onClick={() => void start(id, title)}>
+      <Captions className="h-3.5 w-3.5" />
+      Transcribe
+    </Button>
   );
 }

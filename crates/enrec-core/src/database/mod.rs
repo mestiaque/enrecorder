@@ -4,6 +4,9 @@
 
 mod library;
 pub mod migrations;
+pub mod shortcuts;
+
+pub use library::{DeviceRow, Tag};
 
 use crate::error::{AppError, Result};
 use migrations::MIGRATIONS;

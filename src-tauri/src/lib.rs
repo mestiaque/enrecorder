@@ -3,7 +3,7 @@ mod state;
 mod media_server;
 mod tray;
 
-use commands::{dashboard, library, media, recording, screenshot, settings, system, update};
+use commands::{dashboard, library, media, recording, screenshot, settings, system, transcribe, update};
 use enrec_core::database::Db;
 use enrec_core::settings::Settings;
 use parking_lot::RwLock;
@@ -80,6 +80,9 @@ fn build_state(app: &tauri::AppHandle) -> Result<AppState, Box<dyn std::error::E
         system: RwLock::new(system),
         capture,
         recorder: parking_lot::Mutex::new(None),
+        schedule: parking_lot::Mutex::new(None),
+        shortcut_actions: parking_lot::Mutex::new(Default::default()),
+        transcribing: parking_lot::Mutex::new(None),
         tools: RwLock::new(MediaTools::default()),
         quitting: AtomicBool::new(false),
         data_dir,
@@ -89,12 +92,47 @@ fn build_state(app: &tauri::AppHandle) -> Result<AppState, Box<dyn std::error::E
     })
 }
 
-/// Ctrl+Shift+R start/stop, Ctrl+Shift+P pause/resume (work while the window is hidden).
-fn register_shortcuts(app: &tauri::AppHandle) {
-    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
-    for (code, what) in [(Code::KeyR, "start/stop"), (Code::KeyP, "pause/resume")] {
-        if let Err(e) = app.global_shortcut().register(Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), code)) {
-            log::warn!("shortcut for {what} is not available (another app may use it): {e}");
+/// Registers the global shortcuts from Settings (they work while the window is hidden). Returns
+/// an error naming the first one the system refused (another program uses it).
+pub fn register_shortcuts(app: &tauri::AppHandle) -> enrec_core::Result<()> {
+    use std::str::FromStr;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    let gs = app.global_shortcut();
+    let _ = gs.unregister_all();
+    let state = app.state::<AppState>();
+    let mut map = state.shortcut_actions.lock();
+    map.clear();
+    let mut first_err = None;
+    for row in state.db.shortcuts()? {
+        let Some(accel) = row.accelerator else { continue };
+        let parsed = Shortcut::from_str(&accel.replace("Ctrl", "Control"));
+        match parsed.map_err(|e| e.to_string()).and_then(|sc| gs.register(sc).map(|()| sc).map_err(|e| e.to_string())) {
+            Ok(sc) => {
+                map.insert(sc.id(), row.action.clone());
+            }
+            Err(e) => {
+                log::warn!("shortcut {accel} for {} is not available: {e}", row.label);
+                first_err.get_or_insert_with(|| enrec_core::AppError::InvalidSetting(format!("{accel} is taken by another program")));
+            }
+        }
+    }
+    first_err.map_or(Ok(()), Err)
+}
+
+/// Deletes log files older than the retention setting (the current log is always kept).
+fn prune_logs(dir: &std::path::Path, days: u32) {
+    if days == 0 {
+        return;
+    }
+    let limit = std::time::Duration::from_secs(u64::from(days) * 24 * 3600);
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.file_name().is_some_and(|n| n == "enrecorder.log") {
+            continue;
+        }
+        if e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > limit) {
+            let _ = std::fs::remove_file(&p);
         }
     }
 }
@@ -123,21 +161,27 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
-                    use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
+                    use tauri_plugin_global_shortcut::ShortcutState;
                     if event.state() != ShortcutState::Pressed {
                         return;
                     }
-                    log::info!("global shortcut {shortcut:?}");
-                    if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyR) {
-                        recording::toggle_record(app);
-                    } else if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyP) {
-                        recording::toggle_pause(app);
+                    let action = app.state::<AppState>().shortcut_actions.lock().get(&shortcut.id()).cloned();
+                    log::info!("global shortcut {shortcut:?} → {action:?}");
+                    match action.as_deref() {
+                        Some("record") => recording::toggle_record(app),
+                        Some("pause") => recording::toggle_pause(app),
+                        Some("screenshot") => {
+                            use tauri::Emitter;
+                            let _ = app.emit_to("main", "screenshot-request", ());
+                        }
+                        _ => {}
                     }
                 })
                 .build(),
@@ -152,7 +196,11 @@ pub fn run() {
             media_server::start(app.handle().clone());
             media::refresh_tools(app.handle().clone(), false);
             tray::install(app.handle())?;
-            register_shortcuts(app.handle());
+            if let Err(e) = register_shortcuts(app.handle()) {
+                log::warn!("{e}");
+            }
+            let st = app.state::<AppState>();
+            prune_logs(&st.log_dir, st.settings.read().log_retention_days);
             tray::fit_to_monitor(app.handle());
             if !hidden {
                 tray::show_main(app.handle());
@@ -237,6 +285,29 @@ pub fn run() {
             recording::open_region_selector,
             recording::region_selected,
             system::hide_to_tray,
+            recording::schedule_recording,
+            recording::schedule_status,
+            recording::cancel_schedule,
+            recording::device_manager,
+            library::delete_media_many,
+            library::list_tags,
+            library::create_tag,
+            library::delete_tag,
+            library::set_media_tags,
+            library::media_tag_ids,
+            library::check_library_files,
+            library::reprocess_media,
+            library::media_track,
+            library::extract_frame,
+            library::estimate_export,
+            library::retry_export,
+            library::detect_silence,
+            transcribe::transcription_status,
+            transcribe::transcribe_media,
+            transcribe::cancel_transcription,
+            settings::get_shortcuts,
+            settings::set_shortcut,
+            settings::reset_shortcuts,
         ])
         .build(tauri::generate_context!());
     match result {

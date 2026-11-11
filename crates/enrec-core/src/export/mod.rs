@@ -381,6 +381,37 @@ pub fn attach_overlay(preset: &mut ExportPreset, track: &crate::track::Track) ->
     Ok(path)
 }
 
+/// Silent parts of a recording's sound (below `noise_db` for at least `min_ms`), as
+/// [start, end] ms ranges — FFmpeg's `silencedetect`.
+pub fn detect_silence(ffmpeg: &Path, src: &Path, noise_db: f64, min_ms: u64) -> Result<Vec<(u64, u64)>> {
+    let filter = format!("silencedetect=noise={noise_db}dB:d={:.2}", min_ms as f64 / 1000.0);
+    let args: Vec<String> = ["-hide_banner", "-nostdin", "-i", &src.to_string_lossy(), "-map", "0:a:0", "-af", &filter, "-f", "null", "-"].iter().map(|a| a.to_string()).collect();
+    let out = crate::media::process::run(ffmpeg, &args, Duration::from_secs(600))?;
+    if !out.success {
+        return Err(AppError::Ffmpeg(format!("could not analyse the sound: {}", crate::media::process::tail(&out.stderr, 2))));
+    }
+    Ok(parse_silence(&out.stderr))
+}
+
+/// `silence_start: 1.5` / `silence_end: 3.25 | silence_duration: …` lines → ranges in ms. A
+/// silence that lasts to the end of the file has no end line; it is left open (u64::MAX).
+pub fn parse_silence(stderr: &str) -> Vec<(u64, u64)> {
+    let mut v = Vec::new();
+    let mut start: Option<u64> = None;
+    let num = |line: &str, key: &str| -> Option<u64> { line.split(key).nth(1)?.split_whitespace().next()?.parse::<f64>().ok().map(|s| (s.max(0.0) * 1000.0).round() as u64) };
+    for l in stderr.lines() {
+        if let Some(s) = num(l, "silence_start: ") {
+            start = Some(s);
+        } else if let Some(e) = num(l, "silence_end: ") {
+            v.push((start.take().unwrap_or(0), e));
+        }
+    }
+    if let Some(s) = start {
+        v.push((s, u64::MAX));
+    }
+    v
+}
+
 /// Saves one frame of a video as PNG (thumbnail extraction).
 pub fn extract_frame(ffmpeg: &Path, src: &Path, at_ms: u64, dst: &Path) -> Result<()> {
     let args = ["-hide_banner", "-loglevel", "error", "-nostdin", "-ss", &secs(at_ms), "-i", &src.to_string_lossy(), "-frames:v", "1", "-y", &dst.to_string_lossy()].iter().map(|a| a.to_string()).collect::<Vec<_>>();
@@ -705,6 +736,30 @@ mod tests {
         assert_eq!(estimate_bytes(&ExportPreset { video_kbps: 1000, audio_kbps: 128, ..Default::default() }, Some(8000), 1920, 1080, 30.0, true), Some(1_128_000));
         assert_eq!(estimate_bytes(&ExportPreset { format: "mp3".into(), audio_kbps: 128, ..Default::default() }, Some(8000), 0, 0, 0.0, true), Some(128_000));
         assert!(estimate_bytes(&ExportPreset::default(), None, 1920, 1080, 30.0, true).is_none());
+    }
+
+    #[test]
+    fn silence_lines() {
+        let err = "[silencedetect @ 0x1] silence_start: 0\n[silencedetect @ 0x1] silence_end: 1.5 | silence_duration: 1.5\nsize=N/A\n[silencedetect @ 0x1] silence_start: 4.25\n";
+        assert_eq!(parse_silence(err), vec![(0, 1500), (4250, u64::MAX)]);
+    }
+
+    /// Real FFmpeg: 1 s tone, 2 s silence, 1 s tone → one silent range around 1–3 s.
+    #[test]
+    fn detects_real_silence() {
+        let Some(ff) = find_tool("ffmpeg", None, &[]) else { return };
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("s.wav");
+        let ok = command(Path::new(&ff.path))
+            .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "aevalsrc='if(between(t,1,3),0,0.5*sin(440*2*PI*t))':s=48000:d=4", "-y"])
+            .arg(&src)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "test sound");
+        let r = detect_silence(Path::new(&ff.path), &src, -40.0, 500).unwrap();
+        assert_eq!(r.len(), 1, "{r:?}");
+        assert!((900..1200).contains(&r[0].0) && (2800..3200).contains(&r[0].1), "{r:?}");
     }
 
     struct Chan(Mutex<mpsc::Sender<ExportUpdate>>);

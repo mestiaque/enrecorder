@@ -7,48 +7,52 @@ export queue. Local-first: no account, no cloud upload, no watermark, no telemet
 ENRecorder is part of the EN* family (ENViewer, ENPlayer, ENSave, ENStream, ENiShare, ENPost)
 and uses the same look, themes (Dark, Light, Glass, System) and settings layout.
 
-> **Status: phase 7 done (all planned phases).** Screen recording on **Ubuntu X11**, **Wayland** (sharing dialog,
-> portal + PipeWire) and **Windows** (Desktop Duplication / GDI through FFmpeg), with microphone
-> and system audio (mixed or separate tracks), pause/resume, floating controls, tray and
-> shortcuts; an **Audio Recorder** with live meter; a **Screenshot Studio** with an annotation
-> editor (arrows, shapes, text, steps, blur, crop) and PNG/JPEG/WebP export; a **library** with
-> thumbnails, preview, rename/trash/favourites; an **Export Center** (convert, compress, audio,
-> GIF, trim) and a **Media Editor** for trimming; a **webcam overlay**, microphone **noise
-> reduction / levelling**, loudness normalisation on export and **OCR** of screenshots
-> (Tesseract); **recovery** of interrupted recordings, **in-app updates** and installers for
-> Ubuntu (.deb, AppImage) and Windows (NSIS with FFmpeg bundled). See [FEATURES.md](docs/FEATURES.md) and
+> **Status: 1.0 — every part of the brief is built.** Screen recording on **Ubuntu X11**,
+> **Wayland** (sharing dialog, portal + PipeWire) and **Windows** (Desktop Duplication / GDI
+> through FFmpeg). What is tested where, and the few things deliberately left out, are listed in
+> [FEATURES.md](docs/FEATURES.md); milestone reports are in
 > [DEVELOPMENT_PROGRESS.md](docs/DEVELOPMENT_PROGRESS.md).
 
 ## What works today
 
-* Home dashboard: recent recordings and screenshots, statistics, storage use, free disk space
-  and a system readiness check (display server, audio server, FFmpeg, FFprobe, encoders, disk).
-* Video Recorder (X11): record the desktop, a monitor, a window or an area you draw; 24–120 fps,
-  MP4/MKV/WebM, H.264/HEVC/AV1/VP9 with the best **verified** encoder (GPU first); countdown,
-  pause/resume, auto stop, floating controls, red tray icon, Ctrl+Shift+R / Ctrl+Shift+P.
-* Recordings library and Export Center (read side; they fill up once capture and export exist).
-* Settings: start with the system, start minimized, close to tray, save folders (checked before
-  saving), a specific FFmpeg, theme, accent colour, animations, logs and diagnostics, About.
-* Tray icon, single instance, keyboard shortcuts (Ctrl+1…7 pages, Ctrl+B sidebar, Ctrl+, settings).
+* **Video Recorder**: desktop, monitor, window, area or camera; 24–120 fps, MP4/MKV/WebM,
+  H.264/HEVC/AV1/VP9 with the best **verified** encoder (GPU first, or software only);
+  countdown, pause/resume, auto stop, file splitting, scheduled start; microphone and system
+  audio (mixed or separate tracks, volumes, noise reduction, noise gate, echo cancellation);
+  webcam overlay (circle, rectangle, rounded, frame, shadow); floating controls with a sound
+  level; optional click and key tracking for highlights in exports (X11, Windows).
+* **Audio Recorder**: MP3, M4A, Opus, OGG, FLAC, WAV; 44.1/48 kHz, mono/stereo; peak + RMS meter
+  with level history, clipping and silence warnings.
+* **Screenshot Studio**: screen, monitor, window or area with a delay; annotation editor
+  (arrows, shapes, text, steps, blur, crop, any colour, layers, zoom, copy/paste), Finish
+  (rotate, scale, border, shadow), OCR (Tesseract), PNG/JPEG/WebP.
+* **Library**: thumbnails, preview, tags, filters, grid/list, multi-select, favourites,
+  missing-file check, save a video frame, optional **transcription** to .srt (whisper.cpp).
+* **Media Editor and Export Center**: trim, split, crop, rotate, speed, fades, volume, find and
+  trim silences, convert/compress/audio/GIF, codec/frame rate/bitrate with a size estimate, a
+  queue with progress, cancel and retry.
+* Recovery of interrupted recordings, in-app updates, tray, configurable global shortcuts
+  (Ctrl+Shift+R / P / S by default), desktop notifications, device manager, log retention.
 
 ## Install
 
 **Ubuntu 22.04 / 24.04**
 
 ```bash
-sudo apt install ./ENRecorder_0.2.0_amd64.deb   # pulls in ffmpeg and the PipeWire GStreamer plugin
+sudo apt install ./ENRecorder_1.0.0_amd64.deb   # pulls in ffmpeg and the PipeWire GStreamer plugin
 ```
 
 or the AppImage (needs `ffmpeg` installed: `sudo apt install ffmpeg`):
 
 ```bash
-chmod +x ENRecorder_0.2.0_amd64.AppImage && ./ENRecorder_0.2.0_amd64.AppImage
+chmod +x ENRecorder_1.0.0_amd64.AppImage && ./ENRecorder_1.0.0_amd64.AppImage
 ```
 
 OCR in the screenshot editor needs `sudo apt install tesseract-ocr` (add `tesseract-ocr-ben`
-for Bengali).
+for Bengali). Transcription needs whisper.cpp (`whisper-cli`) and a speech model
+(`ggml-base.bin` or similar); see [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#transcription).
 
-**Windows 10 / 11**: run `ENRecorder_0.2.0_x64-setup.exe`. It installs for the current user (no
+**Windows 10 / 11**: run `ENRecorder_1.0.0_x64-setup.exe`. It installs for the current user (no
 administrator rights) and includes FFmpeg; WebView2 is downloaded if it is missing.
 
 New versions are offered inside the app (Settings → Updates), checked against the release's

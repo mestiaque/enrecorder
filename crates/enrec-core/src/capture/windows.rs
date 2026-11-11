@@ -220,6 +220,7 @@ impl CaptureBackend for WindowsBackend {
                 }
                 Ok(CaptureInput { args: gdigrab(req, "desktop", Some((*x, *y, w, h))), width: w, height: h, frames: None, origin: Some((*x, *y)) })
             }
+            CaptureSource::Camera { id, .. } => Ok(super::camera_input(id, req.fps)),
             CaptureSource::Window { id, .. } => {
                 let w = windows_list().into_iter().find(|w| format!("{:#x}", w.hwnd) == *id).ok_or_else(|| AppError::Other("That window was closed".into()))?;
                 let (ww, wh) = (even((w.rect.right - w.rect.left) as u32), even((w.rect.bottom - w.rect.top) as u32));

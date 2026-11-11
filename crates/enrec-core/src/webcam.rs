@@ -20,13 +20,33 @@ pub struct WebcamOptions {
     pub position: String,
     /// Width of the camera picture as a percentage of the recording width (10–40).
     pub size: u32,
-    /// "rectangle" | "circle"
+    /// "rectangle" | "rounded" | "circle"
     pub shape: String,
+    /// A frame around the camera picture: "" (none) or a colour "#rrggbb".
+    pub border: String,
+    /// A soft dark shadow under the camera picture.
+    pub shadow: bool,
 }
 
 impl Default for WebcamOptions {
     fn default() -> Self {
-        Self { device: None, position: "bottom-right".into(), size: 22, shape: "circle".into() }
+        Self { device: None, position: "bottom-right".into(), size: 22, shape: "circle".into(), border: String::new(), shadow: false }
+    }
+}
+
+/// "#rrggbb" → FFmpeg colour "0xRRGGBB" (None for anything else).
+fn ffmpeg_colour(c: &str) -> Option<String> {
+    let h = c.strip_prefix('#')?;
+    (h.len() == 6 && h.chars().all(|x| x.is_ascii_hexdigit())).then(|| format!("0x{}", h.to_ascii_uppercase()))
+}
+
+/// Alpha mask expression for a shape of size W×H (geq): circle, rounded rectangle or none.
+fn mask(shape: &str) -> Option<&'static str> {
+    match shape {
+        "circle" => Some("if(lte(hypot(X-W/2,Y-H/2),W/2-1),255,0)"),
+        // Corner radius 12 % of the width: outside the corner circles is transparent.
+        "rounded" => Some("if(gt(abs(X-W/2),W/2-W*0.12)*gt(abs(Y-H/2),H/2-W*0.12)*gt(hypot(abs(X-W/2)-(W/2-W*0.12),abs(Y-H/2)-(H/2-W*0.12)),W*0.12),0,255)"),
+        _ => None,
     }
 }
 
@@ -90,12 +110,42 @@ pub fn overlay_graph(o: &WebcamOptions, cam_input: usize, out_w: u32, base: &str
         "bottom-left" => (format!("{margin}"), format!("H-h-{margin}")),
         _ => (format!("W-w-{margin}"), format!("H-h-{margin}")),
     };
-    let cam = if o.shape == "circle" {
-        format!("[{cam_input}:v]crop='min(iw,ih)':'min(iw,ih)',scale={cw}:{cw},format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(lte(hypot(X-W/2,Y-H/2),W/2-1),255,0)'[cam]")
-    } else {
-        format!("[{cam_input}:v]scale={cw}:-2[cam]")
+    let shape = match o.shape.as_str() {
+        "circle" | "rounded" => o.shape.as_str(),
+        _ => "rectangle",
     };
-    format!("[0:v]{base}[base];{cam};[base][cam]overlay=x={x}:y={y}:eof_action=pass,{after}[vout]")
+    // The camera picture (square for a circle), masked to its shape.
+    let mut chain = if shape == "circle" { format!("[{cam_input}:v]crop='min(iw,ih)':'min(iw,ih)',scale={cw}:{cw}") } else { format!("[{cam_input}:v]scale={cw}:-2,crop=trunc(iw/2)*2:trunc(ih/2)*2") };
+    if let Some(m) = mask(shape) {
+        chain.push_str(&format!(",format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='{m}'"));
+    }
+    let mut graph = vec![format!("[0:v]{base}[base]")];
+    let border = ffmpeg_colour(&o.border);
+    let b = (cw / 40).max(3) & !1;
+    let mut cam = "cam".to_string();
+    graph.push(format!("{chain}[{cam}]"));
+    // Frame: the same shape, `b` larger on every side, in the border colour, under the picture.
+    if let Some(colour) = border {
+        let src = format!("[{cam}]");
+        let size = if shape == "circle" { format!("{s}x{s}", s = cw + 2 * b) } else { "PAD".into() };
+        if shape == "circle" {
+            graph.push(format!("color=c={colour}:s={size},format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='{}'[ring]", mask("circle").unwrap_or("255")));
+            graph.push(format!("[ring]{src}overlay={b}:{b}:shortest=1[framed]"));
+        } else {
+            // pad keeps transparency outside the rounded corners of the frame too.
+            let fill = mask(shape).map_or(String::new(), |m| format!(",format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if({m},255,0)'"));
+            graph.push(format!("{src}split[c1][c2];[c1]pad=iw+{d}:ih+{d}:{b}:{b}:color={colour},drawbox=0:0:iw:ih:color={colour}:t=fill{fill}[frame];[frame][c2]overlay={b}:{b}[framed]", d = 2 * b));
+        }
+        cam = "framed".into();
+    }
+    // Shadow: a dark, half-transparent copy of the shape a little lower and to the right.
+    if o.shadow {
+        let off = (cw / 50).max(4);
+        graph.push(format!("[{cam}]split[s1][s2];[s1]format=yuva420p,lutyuv=y=16:u=128:v=128:a='val*0.45'[sh];[sh]pad=iw+{off}:ih+{off}:{off}:{off}:color=black@0[shp];[shp][s2]overlay=0:0[shadowed]"));
+        cam = "shadowed".into();
+    }
+    graph.push(format!("[base][{cam}]overlay=x={x}:y={y}:eof_action=pass,{after}[vout]"));
+    graph.join(";")
 }
 
 #[cfg(test)]
@@ -110,9 +160,33 @@ mod tests {
 
     #[test]
     fn graphs() {
-        let g = overlay_graph(&WebcamOptions { device: Some("/dev/video0".into()), position: "top-left".into(), size: 25, shape: "rectangle".into() }, 1, 1920, "scale=1920:1080", "format=yuv420p");
-        assert!(g.starts_with("[0:v]scale=1920:1080[base];[1:v]scale=480:-2[cam]") && g.contains("overlay=x=32:y=32") && g.ends_with("format=yuv420p[vout]"), "{g}");
+        let g = overlay_graph(&WebcamOptions { device: Some("/dev/video0".into()), position: "top-left".into(), size: 25, shape: "rectangle".into(), ..Default::default() }, 1, 1920, "scale=1920:1080", "format=yuv420p");
+        assert!(g.starts_with("[0:v]scale=1920:1080[base];[1:v]scale=480:-2") && g.contains("[base][cam]overlay=x=32:y=32") && g.ends_with("format=yuv420p[vout]"), "{g}");
+        let styled = overlay_graph(&WebcamOptions { device: Some("x".into()), shape: "rounded".into(), border: "#ffffff".into(), shadow: true, ..Default::default() }, 1, 1280, "null", "format=yuv420p");
+        assert!(styled.contains("color=0xFFFFFF") && styled.contains("[shadowed]") && styled.contains("[base][shadowed]overlay"), "{styled}");
+        let ring = overlay_graph(&WebcamOptions { device: Some("x".into()), border: "#ff0000".into(), ..Default::default() }, 1, 1280, "null", "format=yuv420p");
+        assert!(ring.contains("color=c=0xFF0000:s=") && ring.contains("[base][framed]overlay"), "{ring}");
+        assert_eq!(ffmpeg_colour("blue"), None);
         let c = overlay_graph(&WebcamOptions::default(), 1, 1280, "crop=iw:ih", "format=nv12,hwupload");
         assert!(c.contains("geq=") && c.contains("x=W-w-21:y=H-h-21"), "{c}");
+    }
+
+    /// Every shape/border/shadow combination runs in the real FFmpeg (a test pattern stands in
+    /// for the camera).
+    #[test]
+    fn graphs_run_in_ffmpeg() {
+        let Some(ff) = crate::media::ffmpeg::find_tool("ffmpeg", None, &[]) else { return };
+        for shape in ["circle", "rounded", "rectangle"] {
+            for (border, shadow) in [("", false), ("#ffffff", true), ("#ff0000", false)] {
+                let o = WebcamOptions { device: Some("x".into()), shape: shape.into(), border: border.into(), shadow, ..Default::default() };
+                let g = overlay_graph(&o, 1, 640, "null", "format=yuv420p");
+                let args: Vec<String> = ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=10", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=10", "-filter_complex", &g, "-map", "[vout]", "-frames:v", "5", "-f", "null", "-"]
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect();
+                let out = crate::media::process::run(std::path::Path::new(&ff.path), &args, std::time::Duration::from_secs(30)).unwrap();
+                assert!(out.success, "{shape} border={border} shadow={shadow}: {}\n{g}", out.stderr);
+            }
+        }
     }
 }

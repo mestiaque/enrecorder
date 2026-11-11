@@ -11,3 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y --no-install-recommends gstreamer1.0-pipewire gstreamer1.0-tools pulseaudio-utils tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
+# Windows cross-check (cargo check/clippy for x86_64-pc-windows-gnu) and clippy.
+RUN apt-get update && apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64 \
+    && rm -rf /var/lib/apt/lists/* \
+    && rustup target add x86_64-pc-windows-gnu && rustup component add clippy \
+    && chmod -R a+w /opt/rustup /opt/cargo

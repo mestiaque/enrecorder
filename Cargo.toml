@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/enrec-core", "src-tauri"]
 
 [workspace.package]
-version = "0.2.0"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 authors = ["M. Estiaque Ahmed Khan <info@mestiaque.com>"]

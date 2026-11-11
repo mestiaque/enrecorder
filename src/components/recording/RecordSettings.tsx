@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { useAudioDevices, useCameras, usePaths, useTools } from "../../lib/queries";
 import { AudioSourceSelect } from "./AudioSourceSelect";
+import { MicExtras } from "./MicExtras";
 import type { Codec, EncoderStatus, Settings } from "../../lib/types";
 import { useSettings } from "../../store/settings";
 import { toast, useUi } from "../../store/ui";
@@ -117,6 +118,7 @@ export function RecordSettings({ backend }: { backend: string | null | undefined
           </div>
         </Line>
       )}
+      {(s.recMic || s.recSystemAudio) && <MicExtras mic={!!s.recMic} system={!!s.recSystemAudio} />}
       <Line label="Webcam" hint={cameras && !cameras.length ? "No camera found" : "Your camera in a corner of the recording"}>
         <Select value={s.recWebcam} onChange={(v) => void set("recWebcam", v)} className="max-w-[240px]" options={[{ value: "", label: "Off" }, ...(cameras ?? []).map((c) => ({ value: c.id, label: c.name })), ...(s.recWebcam && !(cameras ?? []).some((c) => c.id === s.recWebcam) ? [{ value: s.recWebcam, label: "Disconnected camera" }] : [])]} />
       </Line>
@@ -128,7 +130,16 @@ export function RecordSettings({ backend }: { backend: string | null | undefined
           <Line label="Webcam size and shape">
             <div className="flex gap-2">
               <Select value={s.recWebcamSize} onChange={(v) => void set("recWebcamSize", v)} options={[15, 22, 30, 40].map((n) => ({ value: n, label: `${n}%` }))} />
-              <Segmented value={s.recWebcamShape} onChange={(v) => void set("recWebcamShape", v)} options={[{ value: "circle", label: "Circle" }, { value: "rectangle", label: "Rectangle" }]} />
+              <Segmented value={s.recWebcamShape} onChange={(v) => void set("recWebcamShape", v)} options={[{ value: "circle", label: "Circle" }, { value: "rounded", label: "Rounded" }, { value: "rectangle", label: "Square" }]} />
+            </div>
+          </Line>
+          <Line label="Webcam frame and shadow">
+            <div className="flex items-center gap-2">
+              <Select value={s.recWebcamBorder} onChange={(v) => void set("recWebcamBorder", v)} options={[{ value: "", label: "No frame" }, { value: "#ffffff", label: "White frame" }, { value: "#111111", label: "Black frame" }, { value: s.accent, label: "Accent frame" }]} />
+              <label className="flex items-center gap-1.5 text-[12px]">
+                <Switch checked={s.recWebcamShadow} onChange={(v) => void set("recWebcamShadow", v)} label="Shadow" />
+                Shadow
+              </label>
             </div>
           </Line>
         </>
@@ -142,6 +153,19 @@ export function RecordSettings({ backend }: { backend: string | null | undefined
       <Line label="Stop automatically">
         <Select value={s.recMaxMinutes} onChange={(v) => void set("recMaxMinutes", v)} options={[0, 5, 10, 30, 60, 120].map((n) => ({ value: n, label: n ? `After ${n} min` : "Never" }))} />
       </Line>
+      <Line label="Split into files" hint="A new, complete file every few minutes (long recordings stay manageable)">
+        <Select value={s.recSplitMinutes} onChange={(v) => void set("recSplitMinutes", v)} options={[0, 5, 10, 15, 30, 60].map((n) => ({ value: n as Settings["recSplitMinutes"], label: n ? `Every ${n} min` : "One file" }))} />
+      </Line>
+      {backend !== "waylandPortal" && (
+        <>
+          <Line label="Remember clicks" hint="Saves pointer positions and clicks so highlights can be added when exporting (nothing is drawn into the recording)">
+            <Switch checked={s.recTrackClicks} onChange={(v) => void set("recTrackClicks", v)} label="Remember clicks" />
+          </Line>
+          <Line label="Remember key presses" hint="For a keystroke overlay when exporting. Off by default: it records what you type (kept on this computer only)">
+            <Switch checked={s.recTrackKeys} onChange={(v) => void set("recTrackKeys", v)} label="Remember key presses" />
+          </Line>
+        </>
+      )}
       <Line label="Floating controls" hint={backend === "x11" ? "On X11 they are recorded when they sit inside the recorded area" : "A small bar with the timer, pause and stop"}>
         <Switch checked={s.recShowHud} onChange={(v) => void set("recShowHud", v)} label="Floating controls" />
       </Line>

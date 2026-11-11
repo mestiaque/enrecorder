@@ -166,6 +166,7 @@ impl CaptureBackend for X11Backend {
                 self.rect_input(req, root, x, y, w, h)
             }
             CaptureSource::Portal => Err(AppError::Unsupported("the sharing dialog is only used on Wayland".into())),
+            CaptureSource::Camera { id, .. } => Ok(super::camera_input(id, req.fps)),
             CaptureSource::Window { id, .. } => {
                 let found = s.windows.iter().find_map(|w| match w {
                     CaptureSource::Window { id: wid, width, height, .. } if wid == id => Some((*width, *height)),

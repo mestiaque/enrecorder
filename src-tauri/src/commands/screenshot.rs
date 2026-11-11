@@ -14,10 +14,17 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
-fn stem() -> String {
+/// The file name from Settings → Screenshots (template with {date}, {time}, {mode}).
+fn stem(app: &AppHandle, source: Option<&CaptureSource>) -> String {
     let now = tauri_plugin_log::TimezoneStrategy::UseLocal.get_now();
-    let f = time::macros::format_description!("[year]-[month]-[day] [hour]-[minute]-[second]");
-    format!("Screenshot {}", now.format(&f).unwrap_or_default())
+    let date = now.format(time::macros::format_description!("[year]-[month]-[day]")).unwrap_or_default();
+    let time = now.format(time::macros::format_description!("[hour]-[minute]-[second]")).unwrap_or_default();
+    let mode = source.map_or("screen", |s| match s.kind_label() {
+        "desktop" | "monitor" => "screen",
+        other => other,
+    });
+    let template = app.state::<AppState>().settings.read().shot_name_template.clone();
+    enrec_core::settings::expand_template(&template, &date, &time, mode)
 }
 
 fn set_main_visible(app: &AppHandle, visible: bool) {
@@ -37,7 +44,7 @@ pub async fn take_screenshot(app: AppHandle, source: Option<CaptureSource>, dela
         let state = app.state::<AppState>();
         let folder = state.screenshots_folder();
         enrec_core::settings::check_output_folder(&folder.to_string_lossy())?;
-        let name = stem();
+        let name = stem(&app, source.as_ref());
         let original = screenshot::originals_dir(&folder).join(format!("{}.png", enrec_core::database::new_id()));
         if hide_window {
             set_main_visible(&app, false);

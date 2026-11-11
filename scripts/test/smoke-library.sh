@@ -25,7 +25,7 @@ trap 'kill $APP 2>/dev/null; pkill ffmpeg; pkill -f "pipewire|wireplumber|Xvfb"'
 sleep 22
 xdotool mousemove 720 450 click 1
 xdotool key ctrl+3; sleep 2
-xdotool mousemove 425 416 click 1; sleep 3.5; xdotool key ctrl+shift+r; sleep 4
+xdotool mousemove 425 706 click 1; sleep 3.5; xdotool key ctrl+shift+r; sleep 4
 xdotool key ctrl+6; sleep 2.5
 import -window root "$OUT/1-recordings.png"
 xdotool mousemove "${ROW_X:-600}" "${ROW_Y:-265}" click 1; sleep 2.5

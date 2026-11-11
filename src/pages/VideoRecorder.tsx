@@ -1,5 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Circle, Monitor } from "lucide-react";
+import { CalendarClock, Circle, Monitor, X } from "lucide-react";
+import { useState } from "react";
+import { Dialog } from "../components/ui/overlays";
+import { useSchedule } from "../store/schedule";
+import { errorMessage } from "../lib/api";
+import { toast } from "../store/ui";
 import { EncoderTable } from "../components/media/EncoderTable";
 import { LivePanel } from "../components/recording/LivePanel";
 import { RecordSettings, verifiedFor } from "../components/recording/RecordSettings";
@@ -9,7 +14,7 @@ import { Button, Kbd } from "../components/ui/primitives";
 import { api } from "../lib/api";
 import { useSystem, useTools } from "../lib/queries";
 import { captureBackendLabel } from "../lib/readiness";
-import { useRecorderForm, startRecording } from "../store/recorderForm";
+import { buildOptions, useRecorderForm, startRecording } from "../store/recorderForm";
 import { isActive, useRecording } from "../store/recording";
 import { useSettings } from "../store/settings";
 
@@ -60,7 +65,50 @@ function SystemPanel() {
   );
 }
 
+function ScheduleDialog({ onClose }: { onClose: () => void }) {
+  const source = useRecorderForm((s) => s.source);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const soon = new Date(Date.now() + 10 * 60_000);
+  const [when, setWhen] = useState(`${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}T${pad(soon.getHours())}:${pad(soon.getMinutes())}`);
+  const save = async () => {
+    if (!source) return;
+    const at = new Date(when).getTime();
+    try {
+      await api.scheduleRecording(await buildOptions(source), at, sourceLabel(source));
+      toast({ kind: "success", title: "Recording scheduled", detail: "Keep ENRecorder running (it can stay in the tray)." });
+      onClose();
+    } catch (e) {
+      toast({ kind: "error", title: "Could not schedule", detail: errorMessage(e) });
+    }
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Schedule a recording"
+      description="It starts by itself with the current settings, even with the window hidden. It stops by the time in “Stop automatically”, or when you stop it."
+      className="w-[min(440px,94vw)]"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => void save()}>
+            Schedule
+          </Button>
+        </>
+      }
+    >
+      <label className="block text-[12px] text-muted">
+        Start at
+        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="mt-1 h-9 w-full rounded-md border border-line bg-bg px-2 text-[13px] text-fg outline-none focus:border-accent" />
+      </label>
+      <div className="mt-2 text-[11px] text-faint">{source ? sourceLabel(source) : ""}</div>
+    </Dialog>
+  );
+}
+
 export function VideoRecorderPage() {
+  const [scheduling, setScheduling] = useState(false);
+  const schedule = useSchedule((s) => s.info);
   const snap = useRecording((s) => s.snap);
   const source = useRecorderForm((s) => s.source);
   const codec = useSettings((s) => s.settings.recCodec);
@@ -99,12 +147,28 @@ export function VideoRecorderPage() {
                 <Circle className="h-4 w-4 fill-current text-white" />
                 Start recording
               </Button>
+              <Button className="h-11" disabled={!!blocker || !source || source.type === "portal"} title={source?.type === "portal" ? "On Wayland the sharing dialog needs you, so recordings cannot start by themselves" : "Start at a chosen time"} onClick={() => setScheduling(true)}>
+                <CalendarClock className="h-4 w-4" />
+                Schedule…
+              </Button>
               <div className="min-w-0 text-[12px] text-muted">
                 {blocker ?? (source ? sourceLabel(source) : "")}
                 <div className="text-[11px] text-faint">
                   <Kbd>Ctrl+Shift+R</Kbd> starts and stops from anywhere · microphone and system audio under Recording settings
                 </div>
               </div>
+              {schedule && (
+                <div className="flex w-full items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-[12px]">
+                  <CalendarClock className="h-4 w-4 text-accent" />
+                  <span className="flex-1">
+                    Starts {new Date(schedule.atMs).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · {schedule.label}
+                  </span>
+                  <Button size="sm" variant="ghost" onClick={() => void api.cancelSchedule()}>
+                    <X className="h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
+                </div>
+              )}
             </div>
             <SystemPanel />
           </div>
@@ -114,6 +178,7 @@ export function VideoRecorderPage() {
           <div className="xl:col-span-2">
             <EncoderTable />
           </div>
+          {scheduling && <ScheduleDialog onClose={() => setScheduling(false)} />}
         </div>
       )}
     </>

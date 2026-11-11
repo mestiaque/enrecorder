@@ -10,7 +10,7 @@ The image has Rust, Node 20, pnpm, WebKitGTK 4.1 headers, FFmpeg and Xvfb for he
 docker build -t endl-build scripts/docker          # once
 npx -y pnpm@9.15.0 install                         # frontend packages (host or container)
 scripts/docker/run.sh "pnpm tauri build --bundles deb"
-# → target/release/bundle/deb/ENRecorder_0.2.0_amd64.deb
+# → target/release/bundle/deb/ENRecorder_1.0.0_amd64.deb
 scripts/docker/run.sh "scripts/test/smoke-ui.sh"    # headless UI test with screenshots in target/smoke
 ```
 
@@ -46,8 +46,19 @@ cargo run -p enrec-core --example x11_sources
 cargo run -p enrec-core --example record_desktop -- /tmp/rec [encoder]
 ```
 
-Headless UI tests (Docker): `scripts/test/smoke-ui.sh`, `scripts/test/smoke-record.sh`,
-`scripts/test/smoke-region.sh` (screenshots in `target/smoke*`).
+Headless UI tests (Docker, after a release build; `BIN=/src/target/release/enrecorder`):
+`smoke-ui.sh`, `smoke-record.sh`, `smoke-region.sh`, `smoke-audio.sh`, `smoke-library.sh`,
+`smoke-screenshot.sh`, `smoke-features.sh` (settings pages, click/key tracking, grid + filters,
+editor), plus `wayland-e2e.sh` and `audio-e2e.sh` — all in `scripts/test/`, screenshots in
+`target/smoke*`. Some take button positions as variables (see the top of each script).
+
+Windows cross-check from Linux (in the Docker image):
+
+```bash
+mkdir -p src-tauri/ffmpeg-bin && touch src-tauri/ffmpeg-bin/{ffmpeg.exe,ffprobe.exe,FFMPEG-LICENSE.txt}
+cargo clippy --target x86_64-pc-windows-gnu -p enrec-core -p enrecorder -- -D warnings
+rm -rf src-tauri/ffmpeg-bin
+```
 
 ### Runtime dependencies
 
