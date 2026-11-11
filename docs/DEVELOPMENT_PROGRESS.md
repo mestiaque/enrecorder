@@ -156,3 +156,28 @@ PipeWire, then Windows.Graphics.Capture), FFmpeg recording pipeline, recording H
 **Known limitations**
 * Windows system audio needs a loopback device (Stereo Mix / virtual cable).
 * Volume sliders are not in the UI yet (the engine supports them; editor phase).
+
+## Phase 4 — Screenshots (2026-11-11)
+
+**Implemented**
+* `screenshot`: one-frame grab through the capture backends (`-frames:v 1` PNG), Wayland
+  screenshot portal (`ashpd`), PNG header reading, export to PNG/JPEG/WebP via FFmpeg (no image
+  codec bundled), originals kept in `.enrecorder-originals`, library rows with the annotation JSON.
+* App: `take_screenshot` (delay, hide window, pointer), `screenshot_image`, `save_screenshot`,
+  `copy_screenshot` (clipboard plugin, PNG decoded by Tauri), `get_screenshot`.
+* UI: Screenshot Studio (full screen / monitor / window / area, delay, recent screenshots) and a
+  canvas editor: select/move, arrow, rectangle, ellipse, line, pen, highlight, blur (pixelates the
+  original), text, numbered steps, crop, colours, thickness, undo/redo, shortcuts, save, copy.
+
+**Tests executed**
+* `cargo test -p enrec-core`: 65 passed (new: PNG header; grab from a synthetic source, export to
+  all three formats, refusal of bad input, library insert/update/read).
+* `pnpm test`: 14 passed (annotation hit-testing, moving, step numbers, document parsing).
+* `scripts/test/smoke-screenshot.sh` (Xvfb, UI driven): Ctrl+4 → Take screenshot → editor opens on
+  the 1440×900 capture → rectangle, blur, step → Ctrl+S → PNG saved, original kept, row with
+  annotations.
+* clippy `-D warnings` (core with Wayland feature, app) and `pnpm typecheck`: clean.
+
+**Known limitations**
+* Window screenshots on X11/Windows capture what is visible on screen.
+* No live area selection on screen yet: the area is cropped from a full capture (frozen screen).

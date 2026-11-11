@@ -7,10 +7,12 @@ export queue. Local-first: no account, no cloud upload, no watermark, no telemet
 ENRecorder is part of the EN* family (ENViewer, ENPlayer, ENSave, ENStream, ENiShare, ENPost)
 and uses the same look, themes (Dark, Light, Glass, System) and settings layout.
 
-> **Status: phase 3 done.** Screen recording on **Ubuntu X11**, **Wayland** (sharing dialog,
+> **Status: phase 4 done.** Screen recording on **Ubuntu X11**, **Wayland** (sharing dialog,
 > portal + PipeWire) and **Windows** (Desktop Duplication / GDI through FFmpeg), with microphone
 > and system audio (mixed or separate tracks), pause/resume, floating controls, tray and
-> shortcuts; an **Audio Recorder** with live meter. Screenshots and editing come next. See [FEATURES.md](docs/FEATURES.md) and
+> shortcuts; an **Audio Recorder** with live meter; a **Screenshot Studio** with an annotation
+> editor (arrows, shapes, text, steps, blur, crop) and PNG/JPEG/WebP export. The library,
+> export queue and video editor come next. See [FEATURES.md](docs/FEATURES.md) and
 > [DEVELOPMENT_PROGRESS.md](docs/DEVELOPMENT_PROGRESS.md).
 
 ## What works today

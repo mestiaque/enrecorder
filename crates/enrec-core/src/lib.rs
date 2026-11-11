@@ -8,6 +8,7 @@ pub mod database;
 pub mod error;
 pub mod media;
 pub mod recording;
+pub mod screenshot;
 pub mod settings;
 pub mod storage;
 pub mod system;

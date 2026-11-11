@@ -57,6 +57,16 @@ format ("mp4"|"mkv"|"webm"), codec ("h264"|"hevc"|"av1"|"vp9"), encoder ("auto"|
 sizeBytes, encoder, width, height, source, outputPath?, recordingId?, error?, notice?, audioLevel? (dBFS),
 audioTracks, audioOnly }`.
 
+## Screenshots
+
+| Command | Arguments | Returns |
+|---|---|---|
+| `take_screenshot` | `source: CaptureSource \| null` (null = Wayland portal), `delay` (s), `hideWindow`, `cursor` | `Screenshot` |
+| `screenshot_image` | `id` | base64 PNG of the original |
+| `save_screenshot` | `id`, `png` (base64/data URL), `format` ("png"\|"jpeg"\|"webp"), `quality`, `annotations?` (JSON) | `Screenshot` |
+| `copy_screenshot` | `png` | — |
+| `get_screenshot` | `id` | `Screenshot` = `{ id, title, path, format, width, height, sizeBytes, annotations?, createdAt }` |
+
 ## System
 
 | Command | Arguments | Returns |

@@ -12,7 +12,7 @@ export const PAGES: { id: PageId; label: string; icon: ReactNode; phase?: number
   { id: "home", label: "Home", icon: <Home className="h-4 w-4" />, section: "studio" },
   { id: "video", label: "Video Recorder", icon: <MonitorPlay className="h-4 w-4" />, section: "studio" },
   { id: "audio", label: "Audio Recorder", icon: <AudioLines className="h-4 w-4" />, section: "studio" },
-  { id: "screenshot", label: "Screenshot Studio", icon: <Camera className="h-4 w-4" />, phase: 4, section: "studio" },
+  { id: "screenshot", label: "Screenshot Studio", icon: <Camera className="h-4 w-4" />, section: "studio" },
   { id: "editor", label: "Media Editor", icon: <Scissors className="h-4 w-4" />, phase: 5, section: "studio" },
   { id: "recordings", label: "Recordings", icon: <Clapperboard className="h-4 w-4" />, section: "library" },
   { id: "exports", label: "Export Center", icon: <ListVideo className="h-4 w-4" />, section: "library" },

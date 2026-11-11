@@ -238,6 +238,17 @@ impl CaptureBackend for WaylandBackend {
     }
 }
 
+/// Screenshot through the desktop's screenshot portal (GNOME/KDE show their own picker when
+/// `interactive`). Returns the file the portal wrote; the caller copies it into the library.
+pub fn portal_screenshot(interactive: bool) -> Result<std::path::PathBuf> {
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| AppError::Other(format!("portal runtime: {e}")))?;
+    rt.block_on(async move {
+        let resp = ashpd::desktop::screenshot::Screenshot::request().interactive(interactive).modal(true).send().await.map_err(portal_err)?.response().map_err(portal_err)?;
+        let uri = resp.uri();
+        uri.to_file_path().map_err(|_| AppError::Other(format!("the portal returned {uri}, not a local file")))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

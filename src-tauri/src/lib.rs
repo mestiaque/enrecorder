@@ -2,7 +2,7 @@ mod commands;
 mod state;
 mod tray;
 
-use commands::{dashboard, library, media, recording, settings, system};
+use commands::{dashboard, library, media, recording, screenshot, settings, system};
 use enrec_core::database::Db;
 use enrec_core::settings::Settings;
 use parking_lot::RwLock;
@@ -102,6 +102,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .plugin(
@@ -181,6 +182,11 @@ pub fn run() {
             system::quit_app,
             recording::list_capture_sources,
             recording::list_audio_devices,
+            screenshot::take_screenshot,
+            screenshot::screenshot_image,
+            screenshot::save_screenshot,
+            screenshot::copy_screenshot,
+            screenshot::get_screenshot,
             recording::start_audio_recording,
             recording::recording_status,
             recording::start_video_recording,

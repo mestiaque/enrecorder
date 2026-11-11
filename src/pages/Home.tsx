@@ -53,8 +53,8 @@ export function HomePage() {
 
       <div className="grid gap-3 md:grid-cols-3">
         <QuickAction page="video" icon={<MonitorPlay className="h-5 w-5" />} title="Record the screen" text="The desktop, a monitor, a window or an area. Ctrl+Shift+R starts and stops." />
-        <QuickAction page="audio" phase={3} icon={<AudioLines className="h-5 w-5" />} title="Audio Recorder" text="Microphone and system audio on separate tracks." />
-        <QuickAction page="screenshot" phase={4} icon={<Camera className="h-5 w-5" />} title="Screenshot Studio" text="Full screen, window or region, then annotate." />
+        <QuickAction page="audio" icon={<AudioLines className="h-5 w-5" />} title="Audio Recorder" text="Microphone and system audio on separate tracks." />
+        <QuickAction page="screenshot" icon={<Camera className="h-5 w-5" />} title="Screenshot Studio" text="Full screen, window or region, then annotate." />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">

@@ -243,3 +243,15 @@ export interface AudioRecordingOptions {
   countdown: number;
   maxMinutes: number;
 }
+
+export interface Screenshot {
+  id: string;
+  title: string;
+  path: string;
+  format: "png" | "jpeg" | "webp";
+  width: number;
+  height: number;
+  sizeBytes: number;
+  annotations: string | null;
+  createdAt: number;
+}

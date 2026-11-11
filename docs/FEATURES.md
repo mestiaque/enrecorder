@@ -59,11 +59,21 @@ strength of mocked tests alone.
 | Multi-track: separate tracks in MP4/MKV/WebM screen recordings and M4A audio; one-track formats (MP3/WAV/FLAC/Opus) mix | Done | the segment join keeps every stream |
 | Live peak meter (0.1 s) in the recorder and the live panel | Done | via FFmpeg `astats` |
 
+## Screenshots (phase 4)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Capture: full screen, monitor, window (X11/Windows, one frame through the same FFmpeg backends), area (captured, then cropped in the editor) | Done | |
+| Wayland: the desktop's screenshot portal (its own screen/window/area picker) | Done | needs xdg-desktop-portal with a screenshot backend (GNOME, KDE) |
+| Delay (3/5/10 s), hide ENRecorder while capturing, include the pointer | Done | |
+| Editor: select/move, arrow, rectangle, ellipse, line, pen, highlight, blur (pixelate the original), text, numbered steps, crop; 8 colours, 3 thicknesses; undo/redo; keyboard shortcuts | Done | |
+| Save as PNG, JPEG or WebP (FFmpeg encodes JPEG/WebP); copy to the clipboard | Done | |
+| Original kept, annotations stored as JSON: a saved screenshot can be edited again | Done | |
+
 ## Planned
 
 | Area | Phase |
 |---|---|
-| Screenshots: full screen, monitor, window, region, delay; annotation editor; PNG/JPEG/WebP; clipboard | 4 |
 | Library actions (rename, delete, tags, favourites, preview, metadata via FFprobe, thumbnails); export queue; basic editor | 5 |
 | Webcam overlay, cursor effects, keystroke overlay, audio processing, OCR, optional transcription | 6 |
 | Recovery (MKV finalisation), performance, security review, installers (Windows NSIS/portable, AppImage), FFmpeg bundling for Windows | 7 |

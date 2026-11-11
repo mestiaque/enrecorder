@@ -22,7 +22,7 @@ pub fn new_id() -> String {
 }
 
 pub struct Db {
-    conn: Mutex<Connection>,
+    pub(crate) conn: Mutex<Connection>,
 }
 
 /// One item of the media library (a recording or a screenshot).

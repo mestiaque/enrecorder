@@ -1,6 +1,6 @@
 /** Typed wrappers around the Rust commands: one function per command. */
 import { invoke } from "@tauri-apps/api/core";
-import type { AboutInfo, AudioDevice, AudioRecordingOptions, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
+import type { AboutInfo, AudioDevice, AudioRecordingOptions, Screenshot, AppPaths, CaptureSource, Dashboard, ExportJob, LibraryQuery, MediaItem, MediaTools, RecordingOptions, RecordingSnapshot, Settings, SettingsPayload, SourcesPayload, SystemInfo } from "./types";
 
 export const api = {
   getSettings: () => invoke<SettingsPayload>("get_settings"),
@@ -18,6 +18,11 @@ export const api = {
   recordingStatus: () => invoke<RecordingSnapshot | null>("recording_status"),
   startRecording: (options: RecordingOptions) => invoke<RecordingSnapshot>("start_video_recording", { options }),
   listAudioDevices: () => invoke<AudioDevice[]>("list_audio_devices"),
+  takeScreenshot: (source: CaptureSource | null, delay: number, hideWindow: boolean, cursor: boolean) => invoke<Screenshot>("take_screenshot", { source, delay, hideWindow, cursor }),
+  screenshotImage: (id: string) => invoke<string>("screenshot_image", { id }),
+  saveScreenshot: (id: string, png: string, format: string, quality: number, annotations: string | null) => invoke<Screenshot>("save_screenshot", { id, png, format, quality, annotations }),
+  copyScreenshot: (png: string) => invoke<void>("copy_screenshot", { png }),
+  getScreenshot: (id: string) => invoke<Screenshot>("get_screenshot", { id }),
   startAudioRecording: (options: AudioRecordingOptions) => invoke<RecordingSnapshot>("start_audio_recording", { options }),
   pauseRecording: () => invoke<void>("pause_recording"),
   resumeRecording: () => invoke<void>("resume_recording"),
