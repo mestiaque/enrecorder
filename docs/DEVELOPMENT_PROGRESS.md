@@ -309,3 +309,31 @@ builds them); no GitHub access from this environment to dry-run the FFmpeg downl
 was not allowed in this environment — CLI flags and progress format were checked against the
 1.7.6 sources); Windows on real hardware; Wayland on GNOME/KDE hardware; pointer tracks on
 Wayland are impossible by design.
+
+## Quick capture — Flameshot/ShareX-style annotate-in-place (2026-11-12)
+
+**Implemented**
+* `commands/quick.rs`: freezes the whole desktop (FFmpeg one frame on X11/Windows, the
+  non-interactive screenshot portal on Wayland) into `<data>/tmp`, hides the main window and the
+  floating controls, opens a borderless always-on-top overlay placed over every monitor (one
+  monitor / Wayland: also full screen), and finishes with copy (clipboard), save (library: the
+  full capture as the original + the area as the crop in the annotation document, so the Studio
+  can re-edit it) or edit (save, then the main window opens it in the editor). Temporary files are
+  removed and hidden windows come back.
+* `views/QuickCapture.tsx`: area selection with magnifier and size label, 8 resize handles and
+  move, in-place tools from the shared `annotate.ts` (arrow, rectangle, ellipse, line, pen,
+  highlight, blur, text, steps), colours, sizes, undo/redo, keyboard shortcuts; the toolbar sits
+  below, above or inside the area, measured so it never leaves the screen.
+* Global shortcut action `quick` (default Ctrl+Alt+A), tray item "Quick capture…", a Quick
+  capture panel in the Screenshot Studio.
+
+**Tests executed**
+* `scripts/test/smoke-quick.sh` (Xvfb): shortcut → frozen desktop → 800×480 area → arrow, blur
+  over a "secret" line, text → Ctrl+S: PNG 800×480 in the library with its annotation document and
+  the original kept; second capture → Enter: 240×160 copied; no temporary files left.
+* Found and fixed while testing: the overlay was opened from a main-thread callback with a
+  10 s wait (closed itself) — now created from the async command; a click with the Text tool let
+  the canvas steal the focus from the new text box — the canvas no longer takes focus.
+* `cargo test` (97 + 3), clippy `-D warnings` on Linux and for Windows, `pnpm typecheck`.
+
+**Not verified here:** the overlay on GNOME/KDE Wayland and on Windows hardware.

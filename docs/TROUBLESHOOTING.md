@@ -72,3 +72,8 @@ let apps watch the pointer or keyboard, so the options are hidden there.
 
 **A scheduled recording did not start** — ENRecorder must be running (the tray is enough) at the
 start time; a notification explains why it could not start.
+
+**Quick capture (Ctrl+Alt+A) does nothing** — another program may hold the combination; choose
+another one in Settings → Shortcuts (or use the tray menu or the button in the Screenshot Studio).
+On Wayland the desktop asks once whether ENRecorder may take screenshots; if that was refused,
+allow it again in the desktop's privacy settings.

@@ -25,7 +25,8 @@ and uses the same look, themes (Dark, Light, Glass, System) and settings layout.
   with level history, clipping and silence warnings.
 * **Screenshot Studio**: screen, monitor, window or area with a delay; annotation editor
   (arrows, shapes, text, steps, blur, crop, any colour, layers, zoom, copy/paste), Finish
-  (rotate, scale, border, shadow), OCR (Tesseract), PNG/JPEG/WebP.
+  (rotate, scale, border, shadow), OCR (Tesseract), PNG/JPEG/WebP; **quick capture**
+  (Ctrl+Alt+A): freeze the screen, pick an area, draw arrows/text/blur in place, Enter copies.
 * **Library**: thumbnails, preview, tags, filters, grid/list, multi-select, favourites,
   missing-file check, save a video frame, optional **transcription** to .srt (whisper.cpp).
 * **Media Editor and Export Center**: trim, split, crop, rotate, speed, fades, volume, find and

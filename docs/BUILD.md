@@ -49,7 +49,7 @@ cargo run -p enrec-core --example record_desktop -- /tmp/rec [encoder]
 Headless UI tests (Docker, after a release build; `BIN=/src/target/release/enrecorder`):
 `smoke-ui.sh`, `smoke-record.sh`, `smoke-region.sh`, `smoke-audio.sh`, `smoke-library.sh`,
 `smoke-screenshot.sh`, `smoke-features.sh` (settings pages, click/key tracking, grid + filters,
-editor), plus `wayland-e2e.sh` and `audio-e2e.sh` — all in `scripts/test/`, screenshots in
+editor), `smoke-quick.sh` (quick capture: area, arrow, blur, text, save and copy), plus `wayland-e2e.sh` and `audio-e2e.sh` — all in `scripts/test/`, screenshots in
 `target/smoke*`. Some take button positions as variables (see the top of each script).
 
 Windows cross-check from Linux (in the Docker image):
