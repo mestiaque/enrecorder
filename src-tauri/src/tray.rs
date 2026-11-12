@@ -1,4 +1,4 @@
-//! Tray icon: open, start/stop recording, pause/resume, quit. While recording the icon turns
+//! Tray icon: open, start/stop recording, pause/resume, quick capture, quit. While recording the icon turns
 //! into a red dot and the tooltip says so, so a hidden window never means hidden recording.
 
 use enrec_core::capture::state::RecState;
@@ -19,9 +19,10 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open ENRecorder", true, None::<&str>)?;
     let record = MenuItem::with_id(app, "record", "Start recording", true, Some("Ctrl+Shift+R"))?;
     let pause = MenuItem::with_id(app, "pause", "Pause", false, Some("Ctrl+Shift+P"))?;
+    let quick = MenuItem::with_id(app, "quick", "Quick capture…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
-    let menu = Menu::with_items(app, &[&open, &sep()?, &record, &pause, &sep()?, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &sep()?, &record, &pause, &quick, &sep()?, &quit])?;
     let mut builder = TrayIconBuilder::with_id("main")
         .tooltip("ENRecorder")
         .menu(&menu)
@@ -33,6 +34,14 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
                 crate::commands::recording::toggle_record(app);
             }
             "pause" => crate::commands::recording::toggle_pause(app),
+            "quick" => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = crate::commands::quick::start_quick_capture(app.clone()).await {
+                        log::warn!("quick capture: {e}");
+                    }
+                });
+            }
             "quit" => request_quit(app),
             _ => {}
         })

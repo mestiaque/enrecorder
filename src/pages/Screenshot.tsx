@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AppWindow, Camera, Crop, FolderOpen, Image as ImageIcon, Monitor, Pencil } from "lucide-react";
+import { AppWindow, Camera, Crop, FolderOpen, Image as ImageIcon, Monitor, Pencil, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ScreenshotEditor } from "../components/screenshot/Editor";
 import type { Tool } from "../components/screenshot/annotate";
@@ -10,7 +10,7 @@ import { formatBytes } from "../lib/format";
 import { useMedia, usePaths } from "../lib/queries";
 import type { CaptureSource, Screenshot } from "../lib/types";
 import { toast } from "../store/ui";
-import { useShotRequest } from "../store/schedule";
+import { useOpenShot, useShotRequest } from "../store/schedule";
 
 type Mode = "screen" | "monitor" | "window" | "area";
 
@@ -85,11 +85,46 @@ export function ScreenshotPage() {
     }
   };
 
+  // A quick capture sent here with "Studio".
+  const openId = useOpenShot((st) => st.id);
+  useEffect(() => {
+    if (!openId) return;
+    useOpenShot.setState({ id: null });
+    void qc.invalidateQueries({ queryKey: ["media"] });
+    void open(openId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
+
+  const shortcuts = useQuery({ queryKey: ["shortcuts"], queryFn: api.getShortcuts, staleTime: 10_000 });
+  const quickKey = shortcuts.data?.find((r) => r.action === "quick")?.accelerator;
+  const quick = () => api.startQuickCapture().catch((e) => toast({ kind: "error", title: "Quick capture failed", detail: errorMessage(e) }, 8000));
+
   return (
     <>
       <PageHeader title="Screenshot Studio" subtitle="Capture the screen, a monitor, a window or an area, then annotate and export." />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-5">
+          <div className="flex flex-wrap items-center gap-4 rounded-xl border border-accent/30 bg-accent/[0.07] px-4 py-3">
+            <Zap className="h-5 w-5 shrink-0 text-accent" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium">Quick capture</div>
+              <div className="text-[12px] text-muted">
+                The screen freezes: drag an area, draw arrows, text or blur right on it, then Enter copies it and Ctrl+S saves it.
+                {quickKey ? (
+                  <>
+                    {" "}
+                    Anywhere: <span className="rounded bg-panel px-1.5 py-px font-mono text-[11px]">{quickKey}</span>
+                  </>
+                ) : (
+                  " Set a shortcut in Settings → Shortcuts to start it from anywhere."
+                )}
+              </div>
+            </div>
+            <Button variant="primary" onClick={() => void quick()}>
+              <Zap className="h-4 w-4" />
+              Quick capture
+            </Button>
+          </div>
           <Panel title="Capture">
             {portal ? (
               <p className="pb-2 text-[12px] text-muted">On Wayland your desktop shows its own screenshot dialog, where you choose the screen, a window or an area.</p>

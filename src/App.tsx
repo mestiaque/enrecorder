@@ -23,7 +23,7 @@ import { PAGE_IDS, useNav, type PageId } from "./store/nav";
 import { useSettings } from "./store/settings";
 import { startRecording } from "./store/recorderForm";
 import { useRecording } from "./store/recording";
-import { useSchedule, useShotRequest } from "./store/schedule";
+import { useOpenShot, useSchedule, useShotRequest } from "./store/schedule";
 import { confirmDialog, useUi } from "./store/ui";
 
 function hexToRgb(hex: string): string {
@@ -117,6 +117,11 @@ export default function App() {
       useNav.getState().go("screenshot");
       useShotRequest.setState((s) => ({ n: s.n + 1 }));
     });
+    // Quick capture → "Studio": open the saved capture in the editor.
+    const unOpenShot = listen<string>(EVENTS.openScreenshot, (e) => {
+      useNav.getState().go("screenshot");
+      useOpenShot.setState({ id: e.payload });
+    });
     // Ctrl+Shift+R / tray → start with the current form.
     const unStart = listen(EVENTS.startRequest, () => void startRecording());
     // Quit while recording: ask first; quitting stops and saves the recording.
@@ -129,6 +134,7 @@ export default function App() {
       offRec?.();
       offSchedule?.();
       void unShot.then((f) => f());
+      void unOpenShot.then((f) => f());
       void unStart.then((f) => f());
       void unQuit.then((f) => f());
     };

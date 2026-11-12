@@ -84,6 +84,9 @@ export const api = {
   transcriptionStatus: () => invoke<TranscriptionStatus>("transcription_status"),
   transcribeMedia: (id: string) => invoke<string>("transcribe_media", { id }),
   cancelTranscription: () => invoke<void>("cancel_transcription"),
+  startQuickCapture: () => invoke<void>("start_quick_capture"),
+  quickCaptureCancel: () => invoke<void>("quick_capture_cancel"),
+  quickCaptureFinish: (action: "copy" | "save" | "edit", png: string, annotations: string, copy: boolean) => invoke<string | null>("quick_capture_finish", { action, png, annotations, copy }),
 };
 
 /** whisper.cpp (optional): program and models found, and the running job. */
@@ -117,6 +120,7 @@ export const EVENTS = {
   scheduleChanged: "schedule-changed",
   screenshotRequest: "screenshot-request",
   transcribeProgress: "transcribe-progress",
+  openScreenshot: "open-screenshot",
 } as const;
 
 /** Commands reject with `{ kind, message }` (AppError) or a plain string. */

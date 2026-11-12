@@ -11,6 +11,7 @@ pub const ACTIONS: &[(&str, &str, &str)] = &[
     ("record", "Start / stop recording", "Ctrl+Shift+R"),
     ("pause", "Pause / resume recording", "Ctrl+Shift+P"),
     ("screenshot", "Take a screenshot", "Ctrl+Shift+S"),
+    ("quick", "Quick capture (select an area, draw, copy)", "Ctrl+Alt+A"),
 ];
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -44,6 +44,8 @@ pub struct AppState {
     pub shortcut_actions: Mutex<std::collections::HashMap<u32, String>>,
     /// The transcription that is running: media id and its cancel flag (one at a time).
     pub transcribing: Mutex<Option<(String, Arc<AtomicBool>)>>,
+    /// The frozen desktop of a quick capture while its overlay is open.
+    pub quick: Mutex<Option<crate::commands::quick::Pending>>,
 }
 
 pub struct Scheduled {

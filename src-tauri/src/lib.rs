@@ -3,7 +3,7 @@ mod state;
 mod media_server;
 mod tray;
 
-use commands::{dashboard, library, media, recording, screenshot, settings, system, transcribe, update};
+use commands::{dashboard, library, media, recording, screenshot, settings, quick, system, transcribe, update};
 use enrec_core::database::Db;
 use enrec_core::settings::Settings;
 use parking_lot::RwLock;
@@ -83,6 +83,7 @@ fn build_state(app: &tauri::AppHandle) -> Result<AppState, Box<dyn std::error::E
         schedule: parking_lot::Mutex::new(None),
         shortcut_actions: parking_lot::Mutex::new(Default::default()),
         transcribing: parking_lot::Mutex::new(None),
+        quick: parking_lot::Mutex::new(None),
         tools: RwLock::new(MediaTools::default()),
         quitting: AtomicBool::new(false),
         data_dir,
@@ -180,6 +181,15 @@ pub fn run() {
                         Some("screenshot") => {
                             use tauri::Emitter;
                             let _ = app.emit_to("main", "screenshot-request", ());
+                        }
+                        Some("quick") => {
+                            let app = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(e) = quick::start_quick_capture(app.clone()).await {
+                                    log::warn!("quick capture: {e}");
+                                    commands::recording::notify(&app, "Quick capture failed", &e.to_string());
+                                }
+                            });
                         }
                         _ => {}
                     }
@@ -302,6 +312,10 @@ pub fn run() {
             library::estimate_export,
             library::retry_export,
             library::detect_silence,
+            quick::start_quick_capture,
+            quick::quick_capture_image,
+            quick::quick_capture_cancel,
+            quick::quick_capture_finish,
             transcribe::transcription_status,
             transcribe::transcribe_media,
             transcribe::cancel_transcription,

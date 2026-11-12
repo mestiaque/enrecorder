@@ -15,7 +15,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
 /// The file name from Settings → Screenshots (template with {date}, {time}, {mode}).
-fn stem(app: &AppHandle, source: Option<&CaptureSource>) -> String {
+pub(crate) fn stem(app: &AppHandle, source: Option<&CaptureSource>) -> String {
     let now = tauri_plugin_log::TimezoneStrategy::UseLocal.get_now();
     let date = now.format(time::macros::format_description!("[year]-[month]-[day]")).unwrap_or_default();
     let time = now.format(time::macros::format_description!("[hour]-[minute]-[second]")).unwrap_or_default();

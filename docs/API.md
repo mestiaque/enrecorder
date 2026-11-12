@@ -121,6 +121,10 @@ speed (0.25–4), fadeInMs, fadeOutMs, fps?, videoCodec?, videoKbps?, audioKbps?
 | `ocr_status` | — | `{ available, languages }` |
 | `ocr_screenshot` | `png`, `languages` ("eng+ben") | recognised text |
 | `copy_text` | `text` | — |
+| `start_quick_capture` | — | freezes the desktop and opens the quick-capture overlay |
+| `quick_capture_image` | — | the frozen desktop as raw PNG bytes (`ArrayBuffer`) |
+| `quick_capture_finish` | `action` ("copy"\|"save"\|"edit"), `png` (finished area), `annotations` (document with `crop`), `copy` | screenshot id when saved, else null |
+| `quick_capture_cancel` | — | closes the overlay |
 | `get_screenshot` | `id` | `Screenshot` = `{ id, title, path, format, width, height, sizeBytes, annotations?, createdAt }` |
 
 ## System
@@ -151,3 +155,4 @@ speed (0.25–4), fadeInMs, fadeOutMs, fps?, videoCodec?, videoKbps?, audioKbps?
 | `schedule-changed` | `ScheduleInfo \| null` | a recording was scheduled, started or cancelled |
 | `screenshot-request` | — | the screenshot shortcut was pressed |
 | `transcribe-progress` | `{ mediaId, percent }` | transcription progress |
+| `open-screenshot` | screenshot id | quick capture → "Studio": the main window opens it in the editor |

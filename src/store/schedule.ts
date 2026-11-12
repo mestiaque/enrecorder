@@ -20,3 +20,6 @@ export const useSchedule = create<ScheduleStore>((set) => ({
 
 /** Bumped by the screenshot shortcut; the Screenshot page takes one when it sees a new value. */
 export const useShotRequest = create<{ n: number }>(() => ({ n: 0 }));
+
+/** A screenshot to open in the Screenshot Studio editor (set by quick capture → "Studio"). */
+export const useOpenShot = create<{ id: string | null }>(() => ({ id: null }));
