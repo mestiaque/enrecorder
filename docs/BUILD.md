@@ -10,7 +10,7 @@ The image has Rust, Node 20, pnpm, WebKitGTK 4.1 headers, FFmpeg and Xvfb for he
 docker build -t endl-build scripts/docker          # once
 npx -y pnpm@9.15.0 install                         # frontend packages (host or container)
 scripts/docker/run.sh "pnpm tauri build --bundles deb"
-# → target/release/bundle/deb/ENRecorder_1.0.0_amd64.deb
+# → target/release/bundle/deb/ENRecorder_1.1.0_amd64.deb
 scripts/docker/run.sh "scripts/test/smoke-ui.sh"    # headless UI test with screenshots in target/smoke
 ```
 

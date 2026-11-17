@@ -127,7 +127,23 @@ jobs:
           find out -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*-setup.exe' \) -exec cp {} files/ \;
           ls -l files
           test "$(ls files | wc -l)" -ge 3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: src
+      - name: Release notes
+        # What the in-app update dialog shows: the changes since the previous version (commit
+        # titles, without CI/docs housekeeping), not GitHub's generated "Full Changelog" link.
+        run: |
+          prev=$(git -C src describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          {
+            echo "What's new in ${GITHUB_REF_NAME#v}:"
+            echo
+            git -C src log --no-merges --format='- %s' ${prev:+$prev..}"$GITHUB_REF_NAME" \
+              | grep -viE '^- (CI|README|Docs?|Status report)\b' || true
+          } > release-notes.md
+          cat release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
           files: files/*
-          generate_release_notes: true
+          body_path: release-notes.md

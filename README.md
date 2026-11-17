@@ -40,20 +40,20 @@ and uses the same look, themes (Dark, Light, Glass, System) and settings layout.
 **Ubuntu 22.04 / 24.04**
 
 ```bash
-sudo apt install ./ENRecorder_1.0.0_amd64.deb   # pulls in ffmpeg and the PipeWire GStreamer plugin
+sudo apt install ./ENRecorder_1.1.0_amd64.deb   # pulls in ffmpeg and the PipeWire GStreamer plugin
 ```
 
 or the AppImage (needs `ffmpeg` installed: `sudo apt install ffmpeg`):
 
 ```bash
-chmod +x ENRecorder_1.0.0_amd64.AppImage && ./ENRecorder_1.0.0_amd64.AppImage
+chmod +x ENRecorder_1.1.0_amd64.AppImage && ./ENRecorder_1.1.0_amd64.AppImage
 ```
 
 OCR in the screenshot editor needs `sudo apt install tesseract-ocr` (add `tesseract-ocr-ben`
 for Bengali). Transcription needs whisper.cpp (`whisper-cli`) and a speech model
 (`ggml-base.bin` or similar); see [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#transcription).
 
-**Windows 10 / 11**: run `ENRecorder_1.0.0_x64-setup.exe`. It installs for the current user (no
+**Windows 10 / 11**: run `ENRecorder_1.1.0_x64-setup.exe`. It installs for the current user (no
 administrator rights) and includes FFmpeg; WebView2 is downloaded if it is missing.
 
 New versions are offered inside the app (Settings → Updates), checked against the release's

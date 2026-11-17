@@ -1,4 +1,4 @@
-import { Copy, EyeOff, FolderOpen, Monitor, Moon, MoreHorizontal, PanelLeft, Power, Settings, Sparkles, Sun } from "lucide-react";
+import { Copy, EyeOff, FolderOpen, MoreHorizontal, PanelLeft, Power, Settings } from "lucide-react";
 import { api, errorMessage } from "../../lib/api";
 import { usePaths } from "../../lib/queries";
 import { useNav } from "../../store/nav";
@@ -23,8 +23,6 @@ export function Toolbar() {
   const page = useNav((s) => s.page);
   const { data: paths } = usePaths();
   const title = PAGES.find((p) => p.id === page)?.label ?? "";
-  const themeIcon =
-    settings.theme === "light" ? <Sun className="h-4 w-4" /> : settings.theme === "dark" ? <Moon className="h-4 w-4" /> : settings.theme === "glass" ? <Sparkles className="h-4 w-4" /> : <Monitor className="h-4 w-4" />;
   const openFolder = (p?: string) => p && api.openFolder(p).catch((e) => toast({ kind: "error", title: "Could not open the folder", detail: errorMessage(e) }));
 
   return (
@@ -33,15 +31,6 @@ export function Toolbar() {
         <PanelLeft className="h-4 w-4" />
       </IconButton>
       <div className="ml-1 min-w-0 flex-1 truncate text-[13px] font-medium">{title}</div>
-      <DropdownMenu
-        trigger={<IconButton label="Theme">{themeIcon}</IconButton>}
-        entries={[
-          { label: "Dark", icon: <Moon className="h-3.5 w-3.5" />, checked: settings.theme === "dark", onSelect: () => void set("theme", "dark") },
-          { label: "Light", icon: <Sun className="h-3.5 w-3.5" />, checked: settings.theme === "light", onSelect: () => void set("theme", "light") },
-          { label: "Glass", icon: <Sparkles className="h-3.5 w-3.5" />, checked: settings.theme === "glass", onSelect: () => void set("theme", "glass") },
-          { label: "System", icon: <Monitor className="h-3.5 w-3.5" />, checked: settings.theme === "system", onSelect: () => void set("theme", "system") },
-        ]}
-      />
       <DropdownMenu
         trigger={
           <IconButton label="More">

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="2"/></filter>
+    <linearGradient id="a" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="1"/>
+      <stop offset=".4" stop-color="#fff" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".25"/>
+    </linearGradient>
+    <linearGradient id="b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".3"/>
+    </linearGradient>
+    <linearGradient id="c" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".2"/>
+    </linearGradient>
+  </defs>
+  <g filter="url(#soft)">
+    <path fill="url(#b)" d="M-120 300 C 260 120, 560 430, 930 250 S 1440 -60, 1760 20 L 1760 190 C 1440 110, 1180 470, 870 480 S 260 360, -120 470 Z"/>
+    <path fill="url(#a)" d="M-120 700 C 300 470, 650 900, 1040 540 S 1500 80, 1760 190 L 1760 560 C 1450 420, 1270 860, 900 930 S 280 1010, -120 1080 Z"/>
+    <path fill="url(#c)" d="M760 1100 C 1060 820, 1340 960, 1760 650 L 1760 1100 Z"/>
+    <path fill="url(#b)" opacity=".6" d="M-120 980 C 220 900, 420 1000, 700 1100 L -120 1100 Z"/>
+  </g>
+</svg>

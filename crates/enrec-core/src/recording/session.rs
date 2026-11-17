@@ -428,6 +428,19 @@ impl Runner {
                         return;
                     }
                 }
+                // No frame since the last split yet (FFmpeg was slow to deliver the first one,
+                // so the part was dropped): there is nothing to save, so keep recording into
+                // this file instead of failing the whole recording.
+                if self.segments.is_empty() {
+                    match self.start_segment() {
+                        Ok(s) => seg = Some(s),
+                        Err(e) => {
+                            self.fail(format!("could not start the next file: {e}"));
+                            return;
+                        }
+                    }
+                    continue;
+                }
                 match self.finalize(false) {
                     Ok((path, _)) => {
                         log::info!("recording: part {} saved as {}", self.file_part, path.display());

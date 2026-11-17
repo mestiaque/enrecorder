@@ -37,10 +37,10 @@ const THEME_CARDS: { id: Settings["theme"]; label: string; bg: string; side: str
   {
     id: "glass",
     label: "Glass",
-    bg: "radial-gradient(circle at 15% 20%, rgba(139,108,255,.9), transparent 55%), radial-gradient(circle at 90% 10%, rgba(226,64,122,.8), transparent 50%), radial-gradient(circle at 70% 95%, rgba(56,189,248,.75), transparent 55%), #1a1530",
-    side: "rgba(255,255,255,.14)",
-    bar: "rgba(255,255,255,.3)",
-    tile: "rgba(255,255,255,.18)",
+    bg: "linear-gradient(155deg, #f4f7fd 22%, rgb(var(--accent) / 0.55) 48%, #e9f0fc 66%, rgb(var(--accent) / 0.85) 100%)",
+    side: "rgba(255,255,255,.6)",
+    bar: "rgba(255,255,255,.8)",
+    tile: "rgba(255,255,255,.65)",
   },
   { id: "system", label: "System", bg: "linear-gradient(135deg, #f4f4f6 50%, #131315 50%)", side: "rgba(127,127,127,.25)", bar: "rgba(127,127,127,.4)", tile: "rgba(127,127,127,.3)" },
 ];
@@ -72,7 +72,7 @@ function ThemeCards({ value, onChange }: { value: Settings["theme"]; onChange: (
           </button>
         ))}
       </div>
-      <div className="mt-2 text-[11px] text-faint">System follows your desktop's light or dark setting.</div>
+      <div className="mt-2 text-[11px] text-faint">Glass: light, frosted panels over flowing ribbons in the accent colour.</div>
     </div>
   );
 }

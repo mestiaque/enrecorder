@@ -38,7 +38,7 @@ function useTheme() {
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
-      const dark = theme === "dark" || theme === "glass" || (theme === "system" && mq.matches);
+      const dark = theme === "dark" || (theme === "system" && mq.matches);
       document.documentElement.classList.toggle("dark", dark);
       document.documentElement.classList.toggle("light", !dark);
       document.documentElement.classList.toggle("glass", theme === "glass");
