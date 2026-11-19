@@ -17,6 +17,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 const API_LATEST: &str = "https://api.github.com/repos/mestiaque/enrecorder/releases/latest";
+/// The latest release, as published to the public mestiaque/en-releases repository.
+const MANIFEST: &str = "https://raw.githubusercontent.com/mestiaque/en-releases/main/enrecorder.json";
 const RELEASES_PAGE: &str = "https://github.com/mestiaque/enrecorder/releases/latest";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -141,14 +143,19 @@ pub async fn check_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> 
     let current = app.package_info().version.to_string();
     let ua = user_agent(&app);
     tauri::async_runtime::spawn_blocking(move || {
-        let rel: serde_json::Value = agent(15)
-            .get(API_LATEST)
-            .set("User-Agent", &ua)
-            .set("Accept", "application/vnd.github+json")
-            .call()
-            .map_err(|e| format!("Could not reach GitHub: {e}"))?
-            .into_json()
-            .map_err(|e| format!("Unexpected answer from GitHub: {e}"))?;
+        let fetch = |url: &str| -> Result<serde_json::Value, String> {
+            agent(15)
+                .get(url)
+                .set("User-Agent", &ua)
+                .set("Accept", "application/vnd.github+json")
+                .call()
+                .map_err(|e| format!("Could not reach GitHub: {e}"))?
+                .into_json()
+                .map_err(|e| format!("Unexpected answer from GitHub: {e}"))
+        };
+        // The public en-releases list first (a plain file: no API rate limit, and the app's own
+        // repository may be private), the repository's release API as a fallback.
+        let rel = fetch(MANIFEST).or_else(|_| fetch(API_LATEST))?;
         Ok(update_from_release(&rel, &current, &install_kind()))
     })
     .await
